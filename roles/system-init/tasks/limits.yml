@@ -1,0 +1,43 @@
+---
+- name: 确保 /etc/security/limits.d 目录存在
+  file:
+    path: /etc/security/limits.d
+    state: directory
+    mode: '0755'
+
+- name: 分发 limits 配置文件
+  copy:
+    src: 99-ikubeops-limits.conf
+    dest: /etc/security/limits.d/99-ikubeops-limits.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "重启 logind 服务"
+
+- name: 确保 PAM 配置启用了 pam_limits.so (Debian/Ubuntu)
+  lineinfile:
+    path: /etc/pam.d/common-session
+    regexp: '^session\s+required\s+pam_limits.so'
+    line: 'session required pam_limits.so'
+    state: present
+  when: ansible_facts['os_family'] == 'Debian' or ansible_facts['os_family'] == 'Ubuntu'
+  notify: "重启 logind 服务"
+
+- name: 确保 PAM 配置启用了 pam_limits.so (RedHat/CentOS)
+  lineinfile:
+    path: /etc/pam.d/system-auth
+    regexp: '^session\s+required\s+pam_limits.so'
+    line: 'session required pam_limits.so'
+    state: present
+  when: ansible_os_family in centos_family
+  notify: "重启 logind 服务"
+
+- name: 启动 systemd logind 服务
+  service:
+    name: systemd-logind
+    state: started
+    enabled: yes
+
+- name: limits 资源限制配置完成
+  debug:
+    msg: "limits 资源限制配置完成"

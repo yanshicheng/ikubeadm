@@ -1,0 +1,27 @@
+---
+- name: 检查 auditd 软件包
+  package:
+    name: "{{ 'auditd' if (ansible_distribution == 'Ubuntu' or ansible_distribution == 'Debian') else 'audit' }}"
+    state: present
+  tags: auditd
+
+- name: 分发 auditd 配置文件
+  template:
+    src: 'auditd.conf.j2'
+    dest: '/etc/audit/auditd.conf'
+    owner: 'root'
+    group: 'root'
+    mode: '0640'
+  register: auditd_config
+  notify:
+  - "重启 auditd (Ubuntu/Debian)"
+  - "重启 auditd (CentOS/RHEL)"
+  tags: auditd
+
+- name: 启动 auditd 服务
+  systemd:
+    name: auditd
+    state: started
+    enabled: yes
+  ignore_errors: true
+  tags: auditd

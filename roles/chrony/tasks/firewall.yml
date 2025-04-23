@@ -1,0 +1,62 @@
+---
+# 为 Chrony NTP 服务器配置防火墙
+
+- name: 检测防火墙类型
+  command: which firewall-cmd
+  register: firewalld_check
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  tags:
+  - firewall
+  - chrony
+  - server
+
+- name: 检测 UFW 防火墙
+  command: which ufw
+  register: ufw_check
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  when: firewalld_check.rc != 0
+  tags:
+  - firewall
+  - chrony
+  - server
+
+- name: 配置 firewalld（RedHat 系统）
+  block:
+  - name: 在 firewalld 中开放 NTP 端口
+    firewalld:
+      port: "123/udp"
+      permanent: yes
+      state: enabled
+      immediate: yes
+    notify: 重载防火墙
+  when:
+  - firewalld_check.rc == 0
+  - chrony_server_mode | bool
+  - inventory_hostname in groups['chrony']
+  - deploy_chrony_server | default(true) | bool
+  tags:
+  - firewall
+  - chrony
+  - server
+
+- name: 配置 UFW（Debian 系统）
+  block:
+  - name: 在 UFW 中开放 NTP 端口
+    ufw:
+      rule: allow
+      port: '123'
+      proto: udp
+  when:
+  - ufw_check is defined
+  - ufw_check.rc == 0
+  - chrony_server_mode | bool
+  - inventory_hostname in groups['chrony']
+  - deploy_chrony_server | default(true) | bool
+  tags:
+  - firewall
+  - chrony
+  - server

@@ -1,0 +1,54 @@
+# 部署名称
+deploy_name: "example"
+# 镜像仓库
+registry: "registry.ikubeops.local:5000"
+# 核心组件镜像仓库二级目录
+registry_project: "ikubeops"
+
+# 版本 
+kubernetes_version: "v1.32.3"
+# kubernetes 集群负载地址
+kube_apiserver_lb_addr: "127.0.0.1"
+# kubernetes 集群负载端口
+kube_apiserver_lb_port: "6443"
+kube_apiserver: "https://{{ kube_apiserver_lb_addr }}:{{ kube_apiserver_lb_port }}"
+# 控制组件部署模式
+control_deploy_pattern: "manifest" # manifest or systemd
+
+# 组件监听地址
+bind_all_address: "0.0.0.0" # 只能是 127.0.0.1 或者 0.0.0.0
+
+# 集群域名
+cluster_dns_domain: "cluster.local"
+
+# k8s 证书存放路径
+kube_base_dir: "/etc/kubernetes"
+# 二进制存放路径
+base_dir: "/opt/kubernetes"
+# 集群名称
+cluster_name: "kubernetes"
+# 容器运行时
+container_runtime: "containerd"
+# service cidr
+service_cidr: "10.96.0.0/12"
+# pod cidr
+pod_cidr: "10.244.0.0/16"
+
+# coredns 服务地址，根据 service_cidr 设置，默认选择网段第二个地址
+cluster_dns_svc_ip: "{{ service_cidr.split('.')[0] }}.{{ service_cidr.split('.')[1] }}.{{ service_cidr.split('.')[2] }}.{{ service_cidr.split('.')[3]|int + 2 }}"
+# service nodeport range
+service_nodeport_range: "30000-32767"
+#   etcd
+# 控制是否使用外部etcd (true: 使用外部etcd, false: 使用内部etcd)
+use_external_etcd: false
+
+# 外部etcd集群地址 (仅当use_external_etcd为true时使用)
+external_etcd_endpoints: "https://etcd-1.example.com:2379,https://etcd-2.example.com:2379,https://etcd-3.example.com:2379"
+inner_etcd_endpoints: "{% for host in groups['etcd'] %}https://{{ host }}:2379{% if not loop.last %},{% endif %}{% endfor %}"
+
+####### api-server 配置 #######
+apiserver_api_audiences: "api,istio-ca"
+apiserver_authorization_mode: "Node,RBAC"
+apiserver_enable_admission_plugins: "NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook"
+proxy_mode: "ipvs"
+ca_dir: "{{ kube_base_dir }}/pki"

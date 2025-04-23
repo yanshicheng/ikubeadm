@@ -1,0 +1,101 @@
+---
+# 主任务文件 - 流程控制
+- name: kube-vip 部署任务
+  import_tasks: deploy.yml
+  tags:
+  - kube-vip
+  - kube-vip-deploy
+
+# 添加部署完成后的信息输出
+- name: kube-vip 部署信息
+  debug:
+    msg:
+    - "===================================================="
+    - "            kube-vip 部署已完成"
+    - "===================================================="
+    - "部署文件位置: {{ kube_vip_manifest_path }}/kube-vip.yaml"
+    - "部署模式: {{ kube_vip_deploy_mode }}"
+    - "虚拟 IP 地址: {{ kube_apiserver_lb_addr }}"
+    - "API 服务器端口: {{ kube_apiserver_lb_port }}"
+  tags:
+  - kube-vip
+  - kube-vip-deploy
+
+# 根据配置显示相关提示信息
+- name: kube-vip  负载均衡模式提示
+  debug:
+    msg:
+    - "【重要提示】您已启用 kube-vip 负载均衡功能 (lb_enable: true)"
+    - "请确保主机已加载 ipvs 内核模块，可以通过以下命令检查："
+    - "  lsmod | grep ip_vs"
+    - ""
+    - "如果未加载，请执行以下命令加载 ipvs 模块："
+    - "  modprobe ip_vs"
+    - "  modprobe ip_vs_rr"
+    - "  modprobe ip_vs_wrr"
+    - "  modprobe ip_vs_sh"
+    - "  modprobe nf_conntrack"
+    - ""
+    - "若要开机自动加载，请创建文件 /etc/modules-load.d/ipvs.conf 并添加以下内容："
+    - "  ip_vs"
+    - "  ip_vs_rr"
+    - "  ip_vs_wrr"
+    - "  ip_vs_sh"
+    - "  nf_conntrack"
+  when: kube_vip_enable_lb | bool
+  tags:
+  - kube-vip
+  - kube-vip-deploy
+
+# BGP 模式特定提示
+- name: BGP 模式提示
+  debug:
+    msg:
+    - "【BGP 模式配置提示】"
+    - "请确保您的网络环境已正确配置 BGP 路由器和对等体设置："
+    - "  - BGP 路由器 ID: {{ kube_vip_bgp_routerid }}"
+    - "  - 本地 AS 号: {{ kube_vip_bgp_as }}"
+    - "  - 对等体 AS 号: {{ kube_vip_bgp_peeras }}"
+    - "{% if kube_vip_bgp_peers != '' %}  - 对等体配置: {{ kube_vip_bgp_peers }}{% endif %}"
+    - ""
+    - "BGP 模式需要确保路由器配置正确接收路由通告，并且节点间 BGP 通讯正常"
+  when: kube_vip_deploy_mode == 'bgp'
+  tags:
+  - kube-vip
+  - kube-vip-deploy
+
+# ARP 模式特定提示
+- name: ARP 模式提示
+  debug:
+    msg:
+    - "【ARP 模式配置提示】"
+    - "请确保您的网络环境支持 ARP 广播："
+    - "  - 网络接口: {{ kube_vip_interface }}"
+    - "  - 虚拟 IP: {{ kube_apiserver_lb_addr }}"
+    - ""
+    - "注意: ARP 模式通常仅适用于单一二层网络环境"
+    - "如果控制平面节点分布在不同网段，建议使用 BGP 模式代替"
+  when: kube_vip_deploy_mode == 'arp'
+  tags:
+  - kube-vip
+  - kube-vip-deploy
+
+# 验证配置提示
+- name: 验证配置提示
+  debug:
+    msg:
+    - "【部署后验证方法】"
+    - "1. 检查 kube-vip Pod 是否正常运行:"
+    - "   kubectl -n kube-system get pod | grep kube-vip"
+    - ""
+    - "2. 验证虚拟 IP 是否可访问:"
+    - "   ping {{ kube_apiserver_lb_addr }}"
+    - ""
+    - "3. 验证 API 服务器端点:"
+    - "   curl -k https://{{ kube_apiserver_lb_addr }}:{{ kube_apiserver_lb_port }}/healthz"
+    - ""
+    - "4. 检查 kube-vip 日志:"
+    - "   kubectl -n kube-system logs -f kube-vip"
+  tags:
+  - kube-vip
+  - kube-vip-deploy

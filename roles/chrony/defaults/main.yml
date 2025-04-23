@@ -1,0 +1,42 @@
+# 配置文件路径
+chrony_driftfile: "/var/lib/chrony/drift"
+chrony_log_dir: "/var/log/chrony"
+centos_family: [ 'CentOS', 'RedHat', 'Rocky', 'AlmaLinux', 'EulerOS' ]
+# 服务器配置选项
+chrony_server_mode: true # 设置为 true 启用服务器模式
+chrony_allow_networks:
+# 允许查询此 NTP 服务器的网络
+- "127.0.0.1/32" # 本地回环地址
+- "::1/128" # IPv6 本地回环地址
+- "0.0.0.0/0"
+# - "192.168.0.0/24"    # 内网示例（取消注释以启用）
+
+# 上游 NTP 服务器列表
+chrony_ntp_servers:
+- server: "ntp1.aliyun.com"
+  options: "iburst"
+- server: "time1.cloud.tencent.com"
+  options: "iburst"
+- server: "0.cn.pool.ntp.org"
+  options: "iburst"
+
+# 防火墙配置
+chrony_configure_firewall: false # 是否配置防火墙
+
+# 高级选项
+chrony_makestep_threshold: 1.0 # 时间跳变阈值（秒）
+chrony_makestep_limit: 3 # 允许的最大时间跳变次数
+chrony_rtcsync: true # 是否启用实时时钟同步
+chrony_local_stratum: 10 # 本地层级（当无法连接到上游服务器时）
+chrony_hwtimestamp_interfaces: [] # 硬件时间戳接口
+chrony_log_options: "tracking measurements statistics" # 日志选项
+chrony_maxupdateskew: 100.0
+
+# 客户端特定配置
+chrony_client_ignore_stratum: true
+chrony_leapsectz: true
+
+# 安全配置
+chrony_use_authentication: false
+chrony_key_id: 1
+chrony_key_value: "ChangeThisToASecureKeyInVault"

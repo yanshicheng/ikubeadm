@@ -1,0 +1,47 @@
+---
+# Debian 系列系统安装的软件包
+system_packages:
+- gcc # C语言编译器
+- g++ # C++语言编译器
+- vim # 文本编辑器
+- unzip # 解压缩工具
+- sysstat # 系统性能监控工具
+- ntpdate # 网络时间同步工具
+- wget # 网络下载工具
+- htop # 交互式进程查看器
+- tree # 以树形结构显示目录内容
+- openssl # SSL/TLS加密工具库
+- libssl-dev # OpenSSL开发库
+- tcpdump # 网络数据包分析工具
+- bash-completion # bash命令补全工具，需要重新登录服务器生效
+- traceroute # 网络路由跟踪工具
+- lrzsz # 文件上传下载工具
+- iftop # 网络带宽监控工具
+- iotop # 磁盘IO监控工具
+- curl # URL传输工具
+- chrony # 时间同步服务
+- bzip2 # 压缩工具
+- psmisc # 进程管理工具集，安装psmisc才能使用命令killall，keepalive的监测脚本需要
+- ipset # IP集合管理工具，ipvs模式需要
+- ipvsadm # IPVS管理工具，ipvs模式需要
+- nfs-common # NFS客户端，挂载nfs共享文件需要 (创建基于nfs的PV需要)
+- rpcbind # RPC端口映射服务
+- locales # 语言环境支持包
+- auditd # 系统审计守护进程
+- conntrack # 网络连接跟踪工具，network connection cleanup用到
+- jq # 轻量JSON处理程序，安装docker查询镜像需要
+- libseccomp2 # 安全计算模式库，安装containerd需要
+- rsync # 文件同步工具，分发证书等配置文件需要
+- socat # 多功能双向数据传输工具，用于port forwarding
+- apt-transport-https
+- ca-certificates
+- iptables
+- util-linux
+- ebtables
+- ethtool
+- iputils-ping
+ntp_service: chrony
+# Ubuntu特定内核参数
+ubuntu_sysctl_params:
+  # Ubuntu可能需要额外的nf_conntrack配置
+  "net.bridge.bridge-nf-call-iptables": 1

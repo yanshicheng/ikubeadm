@@ -1,0 +1,43 @@
+- name: 检查部署模式
+  ansible.builtin.assert:
+    that: addon_deploy_pattern in ['yaml', 'helm']
+    fail_msg: "addon_deploy_pattern 部署类型只能是 ['yaml', 'helm']"
+    success_msg: "集群插件部署模式为: {{ addon_deploy_pattern }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: manifests 方式部署集群插件
+  block:
+  - name: 部署 metrics server 插件
+    import_tasks: metrics-server.yml
+    when:
+    - metrics_server_enabled
+    tags:
+    - metrics-server
+
+  - name: 部署 metallb 插件
+    import_tasks: metallb-manifests.yml
+    when:
+    - metallb_enabled
+    tags:
+    - metallb
+
+  - name: 部署 nfs 插件
+    import_tasks: nfs-provider-manifests.yml
+    when:
+    - nfs_enabled
+    tags:
+    - nfs-provider
+
+  - name: 部署 nginx-ingress 插件
+    import_tasks: nginx-ingress-manifests.yml
+    when:
+    - nginx_ingress_enabled
+    tags:
+    - nginx-ingress
+  when:
+  - addon_deploy_pattern == "yaml"
+  - "'ikube_master' in group_names"

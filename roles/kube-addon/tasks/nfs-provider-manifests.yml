@@ -1,0 +1,151 @@
+---
+- name: 确保 nfs-provider 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/nfs-provider"
+    state: directory
+    mode: '0755'
+  when: "'ikube_master' in group_names"
+
+- name: 复制 nfs-provider 模板到 master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ kube_base_dir }}/addon/nfs-provider/{{ item.dest }}"
+    mode: '0644'
+  loop:
+  - { src: "{{ nfs_template_manifests_dir }}/rbac-csi-nfs.yaml.j2", dest: "rbac-csi-nfs.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/csi-nfs-controller.yaml.j2", dest: "csi-nfs-controller.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/csi-nfs-node.yaml.j2", dest: "csi-nfs-node.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/csi-nfs-driverinfo.yaml.j2", dest: "csi-nfs-driverinfo.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/crd-csi-snapshot.yaml.j2", dest: "crd-csi-snapshot.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/csi-snapshot-controller.yaml.j2", dest: "csi-snapshot-controller.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/rbac-snapshot-controller.yaml.j2", dest: "rbac-snapshot-controller.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/nfs-mount-option.yaml.j2", dest: "nfs-mount-option.yaml" }
+  - { src: "{{ nfs_template_manifests_dir }}/nfs-storage-class.yaml.j2", dest: "nfs-storage-class.yaml" }
+  when: "'ikube_master' in group_names"
+
+- name: 检查命名空间是否存在
+  shell: "{{ base_dir }}/bin/kubectl get namespace {{ nfs_namespace }} --no-headers --ignore-not-found"
+  register: namespace_exists
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  changed_when: false
+
+- name: 创建命名空间
+  shell: "{{ base_dir }}/bin/kubectl create namespace {{ nfs_namespace }}"
+  when: namespace_exists.stdout == ""
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 部署 nfs-provider controller 插件
+  shell: |
+    cd {{ kube_base_dir }}/addon/nfs-provider/
+    {{ base_dir }}/bin/kubectl apply -f rbac-csi-nfs.yaml
+    {{ base_dir }}/bin/kubectl apply -f csi-nfs-controller.yaml
+    {{ base_dir }}/bin/kubectl apply -f csi-nfs-node.yaml
+    {{ base_dir }}/bin/kubectl apply -f csi-nfs-driverinfo.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  register: apply_result
+  failed_when: apply_result.stderr is defined and apply_result.stderr != ""
+  run_once: true
+
+- name: 轮训等待所有 nfs-provider controller 进入运行状态
+  shell: >
+    PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-controller --no-headers | wc -l) && test "$PODCOUNT" -gt 0 && test $({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-controller -o jsonpath='{range .items[*]}{.status.phase}{","}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "Running,true" | wc -l) -eq 0
+  register: controller_pods_not_running
+  retries: 20
+  delay: 10
+  until: controller_pods_not_running.rc == 0
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 轮训等待所有 nfs-provider csi-nfs-node 进入运行状态
+  shell: >
+    PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-node --no-headers | wc -l) && test "$PODCOUNT" -gt 0 && test $({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-node -o jsonpath='{range .items[*]}{.status.phase}{","}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "Running,true" | wc -l) -eq 0
+  register: csi_nfs_node_pods_not_running
+  retries: 20
+  delay: 10
+  until: csi_nfs_node_pods_not_running.rc == 0
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 部署 storage class
+  shell: |
+    cd {{ kube_base_dir }}/addon/nfs-provider/
+    {{ base_dir }}/bin/kubectl apply -f nfs-mount-option.yaml
+    {{ base_dir }}/bin/kubectl apply -f nfs-storage-class.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  register: apply_result
+  failed_when: apply_result.stderr is defined and apply_result.stderr != ""
+  run_once: true
+
+- name: 部署 nfs-provider snapshot 插件
+  block:
+  - name: 部署 snapshot controller
+    shell: |
+      cd {{ kube_base_dir }}/addon/nfs-provider/
+      {{ base_dir }}/bin/kubectl apply -f crd-csi-snapshot.yaml
+      {{ base_dir }}/bin/kubectl apply -f rbac-snapshot-controller.yaml
+      {{ base_dir }}/bin/kubectl apply -f rbac-snapshot-controller.yaml
+      {{ base_dir }}/bin/kubectl apply -f csi-snapshot-controller.yaml
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    register: apply_result
+    failed_when: apply_result.stderr is defined and apply_result.stderr != ""
+    run_once: true
+
+  - name: 轮训等待所有 nfs-provider snapshot controller 进入运行状态
+    shell: >
+      PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=snapshot-controller --no-headers | wc -l) && test "$PODCOUNT" -gt 0 && test $({{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=snapshot-controller -o jsonpath='{range .items[*]}{.status.phase}{","}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "Running,true" | wc -l) -eq 0
+    register: snapshot_pods_not_running
+    retries: 20
+    delay: 10
+    until: snapshot_pods_not_running.rc == 0
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    run_once: true
+
+  - name: 查询 nfs-provider snapshot controller pod 状态
+    shell: >
+      {{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=snapshot-controller
+    register: snapshot_pods_status
+    run_once: true
+    changed_when: false
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+
+  - name: 输出 nfs-provider snapshot controller pod 状态
+    debug:
+      var: snapshot_pods_status.stdout_lines
+    changed_when: false
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    run_once: true
+
+  when:
+  - nfs_snapshot_controller_enabled == true
+
+- name: 查询 nfs-provider controller  pod 状态
+  shell: >
+    {{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-controller
+  register: controller_pods_status
+  run_once: true
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+
+- name: 输出 nfs-provider controller pod 状态
+  debug:
+    var: controller_pods_status.stdout_lines
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 查询 nfs-provider csi-nfs-node  pod 状态
+  shell: >
+    {{ base_dir }}/bin/kubectl get pods -n {{ nfs_namespace }} -l app=csi-nfs-node
+  register: csi_nfs_node_pods_status
+  run_once: true
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+
+- name: 输出 nfs-provider controller pod 状态
+  debug:
+    var: csi_nfs_node_pods_status.stdout_lines
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true

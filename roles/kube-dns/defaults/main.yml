@@ -1,0 +1,33 @@
+kube_base_dir: "/etc/kubernetes"
+base_dir: "/opt/kubernetes"
+service_cidr: "10.96.0.0/12"
+pod_cidr: "10.244.0.0/16"
+addon_deploy_pattern: "yaml" # yaml or helm
+registry: "registry.ikubeops.local"
+
+# coredns 镜像仓库
+coredns_registry_project: "ikubeops"
+
+# 集群 域名
+cluster_dns_domain: "cluster.local"
+
+# 使用的集群组件
+cluster_dns: "coredns"
+# coredns 镜像版本
+coredns_version: "v1.11.3"
+# 默认部署到 kube-system 命名空间
+cluster_dns_namespace: "kube-system"
+coredns_image: "{{ registry }}/{{ coredns_registry_project }}/coredns:{{ coredns_version  }}"
+
+# coredns 服务地址，根据 service_cidr 设置，默认选择网段第二个地址
+cluster_dns_svc_ip: "{{ service_cidr.split('.')[0] }}.{{ service_cidr.split('.')[1] }}.{{ service_cidr.split('.')[2] }}.{{ service_cidr.split('.')[3]|int + 2 }}"
+service_nodeport_range: "30000-32767"
+
+# 启用 local_dns_cache 缓存
+enable_local_dns_cache: true
+
+# coredns 模板文件路径
+coredns_template_manifests_dir: "coredns/manifests"
+
+local_dns_version: "1.25.0"
+node_local_dns_image: "{{ registry }}/{{ coredns_registry_project }}/k8s-dns-node-cache:{{ local_dns_version  }}"

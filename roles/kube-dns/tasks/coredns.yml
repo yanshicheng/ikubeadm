@@ -1,0 +1,54 @@
+# https://raw.githubusercontent.com/coredns/deployment/master/kubernetes/coredns.yaml.sed
+---
+- name: 确保 coredns 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/coredns"
+    state: directory
+    mode: '0755'
+
+- name: 复制 coredns 模板到 master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ kube_base_dir }}/addon/coredns/{{ item.dest }}"
+    mode: '0644'
+  loop:
+  - { src: "{{ coredns_template_manifests_dir }}/coredns-configmap.yaml.j2", dest: "coredns-configmap.yaml" }
+  - { src: "{{ coredns_template_manifests_dir }}/coredns-deployment.yaml.j2", dest: "coredns-deployment.yaml" }
+  - { src: "{{ coredns_template_manifests_dir }}/coredns-sa.yaml.j2", dest: "coredns-sa.yaml" }
+  - { src: "{{ coredns_template_manifests_dir }}/coredns-service.yaml.j2", dest: "coredns-service.yaml" }
+
+- name: master 节点部署 coredns
+  shell: |
+    cd {{ kube_base_dir }}/addon/coredns
+    {{ base_dir }}/bin/kubectl apply -f coredns-sa.yaml
+    {{ base_dir }}/bin/kubectl apply -f coredns-configmap.yaml
+    {{ base_dir }}/bin/kubectl apply -f coredns-deployment.yaml
+    {{ base_dir }}/bin/kubectl apply -f coredns-service.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  register: deploy_result
+
+- name: 等待 coredns 组件就绪
+  shell: >
+    PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ cluster_dns_namespace }} -l k8s-app=kube-dns --no-headers | wc -l) && test "$PODCOUNT" -gt 0 
+  register: coredns_status
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  until: coredns_status.rc == 0
+  retries: 15
+  delay: 10
+  run_once: true
+
+- name: 查询 coredns pod 状态
+  shell: >
+    {{ base_dir }}/bin/kubectl get pods -n {{ cluster_dns_namespace }} -l k8s-app=kube-dns
+  register: coredns_pods_status
+  run_once: true
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+
+- name: 输出 coredns pod 状态
+  debug:
+    var: coredns_pods_status.stdout_lines
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['ikube_master'][0] }}"

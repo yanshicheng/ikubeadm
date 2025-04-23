@@ -1,0 +1,130 @@
+# cert-distribution.yml
+- name: 定义证书和配置文件路径列表
+  set_fact:
+    all_cert_files:
+    - "{{ local_pki_dir }}/ca.pem"
+    - "{{ local_pki_dir }}/ca-key.pem"
+    - "{{ local_pki_dir }}/admin.pem"
+    - "{{ local_pki_dir }}/admin-key.pem"
+    - "{{ local_pki_dir }}/aggregator-proxy.pem"
+    - "{{ local_pki_dir }}/aggregator-proxy-key.pem"
+    - "{{ local_pki_dir }}/kube-apiserver.pem"
+    - "{{ local_pki_dir }}/kube-apiserver-key.pem"
+    - "{{ local_pki_dir }}/kube-controller-manager.pem"
+    - "{{ local_pki_dir }}/kube-controller-manager-key.pem"
+    - "{{ local_pki_dir }}/kube-proxy.pem"
+    - "{{ local_pki_dir }}/kube-proxy-key.pem"
+    - "{{ local_pki_dir }}/kube-scheduler.pem"
+    - "{{ local_pki_dir }}/kube-scheduler-key.pem"
+    all_kubeconfig_files:
+    - "{{ local_kubeconfig_dir }}/admin.kubeconfig"
+    - "{{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig"
+    - "{{ local_kubeconfig_dir }}/kube-proxy.kubeconfig"
+    - "{{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig"
+    node_cert_files:
+    - "{{ local_pki_dir }}/ca.pem"
+    - "{{ local_pki_dir }}/kube-proxy.pem"
+    - "{{ local_pki_dir }}/kube-proxy-key.pem"
+    node_kubeconfig_files:
+    - "{{ local_kubeconfig_dir }}/kube-proxy.kubeconfig"
+  delegate_to: localhost
+  run_once: true
+
+- name: 检查证书文件是否存在
+  delegate_to: localhost
+  run_once: true
+  block:
+  - name: 检查所有证书文件
+    stat:
+      path: "{{ item }}"
+    loop: "{{ all_cert_files }}"
+    register: all_cert_check
+    failed_when: false
+
+  - name: 检查所有 kubeconfig 文件
+    stat:
+      path: "{{ item }}"
+    loop: "{{ all_kubeconfig_files }}"
+    register: all_kubeconfig_check
+    failed_when: false
+
+  - name: 整理缺失文件列表
+    set_fact:
+      missing_files: "{{ all_cert_check.results | selectattr('stat.exists', 'equalto', false) | map(attribute='item') | list + all_kubeconfig_check.results | selectattr('stat.exists', 'equalto', false) | map(attribute='item') | list }}"
+
+  - name: 验证所有必要的文件存在
+    fail:
+      msg: "缺少必要文件: {% for item in missing_files %}{{ item }}{% if not loop.last %}, {% endif %}{% endfor %}。请执行 playbook/04.cert-manager.yml 剧本生成证书。"
+    when: missing_files | length > 0
+
+  - name: 设置检查完成标志
+    set_fact:
+      cert_check_completed: true
+
+- name: 确保目标主机证书目录存在
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+  - "{{ kube_base_dir }}"
+  - "{{ ca_dir }}"
+  - "/root/.kube"
+  when: "'ikube_master' in group_names or 'ikube_node' in group_names"
+
+# Master节点证书分发（全部证书和配置）
+- name: 分发所有证书文件到 master 节点
+  copy:
+    src: "{{ item }}"
+    dest: "{{ ca_dir }}/"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ all_cert_files }}"
+  register: copy_certs_result
+  when: "'ikube_master' in group_names"
+
+- name: 分发所有 kubeconfig 文件到 master 节点
+  copy:
+    src: "{{ item }}"
+    dest: "{{ kube_base_dir }}/"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ all_kubeconfig_files }}"
+  register: copy_kubeconfig_result
+  when: "'ikube_master' in group_names"
+
+- name: 设置 kube-proxy kubeconfig 文件
+  copy:
+    src: "{{ local_kubeconfig_dir }}/admin.kubeconfig"
+    dest: "/root/.kube/config"
+    mode: '0644'
+    owner: root
+    group: root
+  when: "'ikube_master' in group_names"
+
+# Node节点证书分发（仅kube-proxy相关证书和配置）
+- name: 分发 kube-proxy 相关证书到 node 节点
+  copy:
+    src: "{{ item }}"
+    dest: "{{ ca_dir }}/"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ node_cert_files }}"
+  register: copy_node_certs_result
+  when: "'ikube_node' in group_names and 'ikube_master' not in group_names"
+
+- name: 分发 kube-proxy 相关配置到 node 节点
+  copy:
+    src: "{{ item }}"
+    dest: "{{ kube_base_dir }}/"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ node_kubeconfig_files }}"
+  register: copy_node_kubeconfig_result
+  when: "'ikube_node' in group_names and 'ikube_master' not in group_names"

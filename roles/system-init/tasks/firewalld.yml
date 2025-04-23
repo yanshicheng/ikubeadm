@@ -1,0 +1,26 @@
+---
+# 关闭防火墙的 Ansible 任务
+
+# CentOS/RHEL 防火墙处理
+- name: 停止并禁用 firewalld (CentOS/RHEL)
+  systemd:
+    name: firewalld
+    state: stopped
+    enabled: no
+  when: ansible_os_family in centos_family
+  register: firewalld_status
+  failed_when: false
+
+# Ubuntu/Debian 防火墙处理
+- name: 停止并禁用 ufw (Ubuntu/Debian)
+  systemd:
+    name: ufw
+    state: stopped
+    enabled: no
+  when: ansible_distribution in ['Ubuntu', 'Debian']
+  register: ufw_status
+  failed_when: false
+
+- name: 防火墙状态信息
+  debug:
+    msg: "防火墙已关闭并禁用"

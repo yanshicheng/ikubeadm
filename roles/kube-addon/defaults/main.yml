@@ -1,0 +1,79 @@
+# 通用全局配置
+# 存放 kubernetes 相关配置
+kube_base_dir: "/etc/kubernetes"
+# 存放 二进制 文件存放目录
+base_dir: "/opt/kubernetes"
+# 部署模式
+addon_deploy_pattern: "yaml" # yaml or helm
+kubelet_base_dir: "/data/kubelet"
+# 仓库地址
+registry: "registry.ikubeops.local"
+registry_project: "ikubeops"
+
+# 是否启用 metrics-server
+metrics_server_enabled: true
+metrics_server_namespace: "kube-system"
+metrics_server_replicas: "2"
+metrics_server_version: "v0.7.2"
+metrics_server_registry_project: "ikubeops"
+metrics_server_image: "{{ registry }}/{{ metrics_server_registry_project }}/metrics-server:{{ metrics_server_version }}"
+metrics_server_template_manifests_dir: "metrics-server/manifests"
+
+# nfs 相关
+nfs_enabled: true
+nfs_snapshot_controller_enabled: true
+nfs_namespace: "kube-system"
+nfs_server: "127.0.0.1"
+nfs_share_path: "/data"
+nfs_storeage_class_name: "nfs-csi-default"
+nfs_storeage_reclaim_policy: "Retain" # Delete Retain archive
+nfs_storeage_mount_options: "fsvers=4.1,hard"
+nfs_storeage_volume_bind_mode: "Immediate" # Immediate WaitForFirstConsumer
+nfs_controller_replicas: 2
+nfs_registry_project: "nfs-storage"
+nfs_csi_resizer_version: "v1.13.1"
+nfs_csi_resizer_image: "{{ registry }}/{{ nfs_registry_project }}/csi-resizer:{{ nfs_csi_resizer_version }}"
+nfs_csi_snapshotter_version: "v8.2.0"
+nfs_csi_snapshotter_image: "{{ registry }}/{{ nfs_registry_project }}/csi-snapshotter:{{ nfs_csi_snapshotter_version }}"
+nfs_livenessprobe_version: "v2.15.0"
+nfs_livenessprobe_image: "{{ registry }}/{{ nfs_registry_project }}/livenessprobe:{{ nfs_livenessprobe_version }}"
+nfs_nfsplugin_version: "v4.11.0"
+nfs_nfsplugin_image: "{{ registry }}/{{ nfs_registry_project }}/nfsplugin:{{ nfs_nfsplugin_version }}"
+nfs_csi_provisioner_version: "v5.2.0"
+nfs_csi_provisioner_image: "{{ registry }}/{{ nfs_registry_project }}/csi-provisioner:{{ nfs_csi_provisioner_version }}"
+nfs_node_driver_registrar_version: "v2.13.0"
+nfs_node_driver_registrar_image: "{{ registry }}/{{ nfs_registry_project }}/csi-node-driver-registrar:{{ nfs_node_driver_registrar_version }}"
+nfs_snapshot_controller: "v8.2.0"
+nfs_snapshot_controller_image: "{{ registry }}/{{ nfs_registry_project }}/snapshot-controller:{{ nfs_snapshot_controller }}"
+nfs_template_manifests_dir: "nfs-provider/manifests"
+
+# metallb 相关
+metallb_enabled: true
+metallb_namespace: "metallb-system"
+metallb_address_pool:
+- 172.16.1.40-45
+- 172.16.1.55
+
+metallb_registry_project: "metallb"
+metallb_frr_controller_replicas: 2
+metallb_native_controller_replicas: 2
+metallb_frr_version: "9.1.0"
+metallb_frr_image: "{{ registry }}/{{ metallb_registry_project }}/frr:{{ metallb_frr_version }}"
+metallb_speaker_version: "v0.14.9"
+metallb_speaker_image: "{{ registry }}/{{ metallb_registry_project }}/speaker:{{ metallb_speaker_version }}"
+metallb_controller_version: "v0.14.9"
+metallb_controller_image: "{{ registry }}/{{ metallb_registry_project }}/controller:{{ metallb_controller_version }}"
+metallb_template_manifests_dir: "metallb/manifests"
+
+# ingress-nginx
+nginx_ingress_enabled: true
+nginx_ingress_namespace: "ingress-nginx"
+nginx_ingress_service_type: "LoadBalancer" #  ClusterIP(hostNetwork) NodePort LoadBalancer
+nginx_registry_project: "ingress-nginx"
+nginx_ingress_controller_replicas: 2
+nginx_ingress_controller_version: "v1.12.1"
+nginx_ingress_controller_image: "{{ registry }}/{{ nginx_registry_project }}/controller:{{ nginx_ingress_controller_version }}"
+
+nginx_ingress_webhook_version: "v1.5.2"
+nginx_ingress_webhook_image: "{{ registry }}/{{ nginx_registry_project }}/kube-webhook-certgen:{{ nginx_ingress_webhook_version }}"
+nginx_ingress_template_manifests_dir: "nginx-ingress/manifests"

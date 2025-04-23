@@ -1,0 +1,25 @@
+- name: 读取 CA 证书状态信息
+  stat:
+    path: "{{ local_pki_dir }}/ca.pem"
+  register: ca_cert_stat
+  tags: update-certs
+
+- name: 准备 CA 配置文件和签名请求
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ local_pki_dir }}/{{ item }}"
+  with_items:
+  - "ca-config.json"
+  - "ca-csr.json"
+  register: ca_templates_result
+  when: "not ca_cert_stat.stat.exists or _update_ca|bool"
+  tags: update-certs
+
+- name: 生成 CA 证书和私钥
+  shell: >
+    cd {{ local_pki_dir }} && {{ cfssl_dir }}/cfssl gencert -initca ca-csr.json | {{ cfssl_dir }}/cfssljson -bare ca
+  when: "(not ca_cert_stat.stat.exists or _update_ca|bool) and (ca_templates_result.changed|default(false))"
+  register: ca_gen_result
+  changed_when: ca_gen_result.rc == 0
+  failed_when: ca_gen_result.rc != 0 and "already exists" not in ca_gen_result.stderr
+  tags: update-certs

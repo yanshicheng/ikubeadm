@@ -1,0 +1,15 @@
+---
+- name: 检查 NetworkManager 服务状态
+  service_facts:
+
+
+- name: 分发 NetworkManager  配置文件
+  template:
+    src: templates/container-interfaces.conf.j2
+    dest: /etc/NetworkManager/conf.d/container-interfaces.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+  - "重启 NetworkManager"
+  when: ansible_facts.services['NetworkManager.service'] is defined and ansible_facts.services['NetworkManager.service'].state == 'running'

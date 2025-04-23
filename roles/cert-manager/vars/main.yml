@@ -1,0 +1,16 @@
+---
+
+# 证书生成路径相关变量
+generate_certs_dir: "{{ [playbook_dir | dirname, 'deploy', deploy_name] | path_join }}"
+local_pki_dir: "{{ generate_certs_dir }}/pki"
+local_kubeconfig_dir: "{{ generate_certs_dir }}/kubeconfig"
+
+arch_mapping:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm32
+  default: amd64
+# 使用工具路径
+package_dir: "{{ [playbook_dir | dirname, 'packages'] | path_join }}"
+cfssl_dir: "{{ package_dir }}/bin/cfssl/{{ cfssl_version }}/{{ arch_mapping[ansible_architecture] | default(arch_mapping.default) }}"
+kubectl_dir: "{{ package_dir }}/kubernetes/{{ kubernetes_version }}/{{ arch_mapping[ansible_architecture] | default(arch_mapping.default) }}"

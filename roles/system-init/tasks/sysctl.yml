@@ -1,0 +1,41 @@
+---
+- name: 设置合并后的内核参数变量
+  set_fact:
+    sysctl_params: "{{ common_sysctl_params | combine(centos_sysctl_params | default({})) if is_centos else common_sysctl_params | combine(ubuntu_sysctl_params | default({})) }}"
+  tags:
+  - sysctl
+  - kernel_params
+  - kubernetes
+
+- name: 应用所有内核参数
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-ikubeops-sysctl.conf
+    reload: yes
+  loop: "{{ sysctl_params | dict2items }}"
+  register: sysctl_applied
+  tags:
+  - sysctl
+  - kernel_params
+  - kubernetes
+
+- name: 验证关键 Sysctl 参数配置
+  shell: "sysctl -a | grep -E 'net.ipv4.ip_forward|net.bridge.bridge-nf-call-iptables'"
+  register: sysctl_verification
+  changed_when: false
+  ignore_errors: true
+  tags:
+  - sysctl
+  - kernel_params
+  - kubernetes
+
+- name: 显示 Sysctl 配置状态
+  debug:
+    msg: "Sysctl参数已成功应用"
+    verbosity: 1
+  tags:
+  - sysctl
+  - kernel_params
+  - kubernetes

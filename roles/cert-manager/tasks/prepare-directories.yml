@@ -1,0 +1,78 @@
+---
+# 在主节点创建证书存储工作目录
+- name: 创建证书存储工作目录
+  file:
+    path: "{{ generate_certs_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+  - "" # 根目录
+  - "pki"
+  - "pki/kubelet"
+  - "kubeconfig"
+  - "kubeconfig/kubelet"
+
+- name: 工具检查与配置
+  block:
+  # CFSSL 工具检查与配置
+  - name: 检查 CFSSL 二进制文件
+    stat:
+      path: "{{ cfssl_dir }}/cfssl"
+    register: cfssl_stat
+
+  - name: 检查 CFSSLjson 二进制文件
+    stat:
+      path: "{{ cfssl_dir }}/cfssljson"
+    register: cfssljson_stat
+
+  - name: 设置 CFSSL 文件权限
+    file:
+      path: "{{ item }}"
+      mode: "0755"
+    with_items:
+    - "{{ cfssl_dir }}/cfssl"
+    - "{{ cfssl_dir }}/cfssljson"
+    when: cfssl_stat.stat.exists and cfssljson_stat.stat.exists
+
+  - name: 提示安装 CFSSL 工具
+    fail:
+      msg: |
+        CFSSL 工具不存在，请安装 cfssl 和 cfssljson 工具。
+        可以使用以下命令：
+        mkdir -p {{ cfssl_dir }}
+        curl -L https://github.com/cloudflare/cfssl/releases/download/v{{ cfssl_version }}/cfssl_{{ cfssl_version }}_linux_amd64 -o {{ cfssl_dir }}/cfssl
+        curl -L https://github.com/cloudflare/cfssl/releases/download/v{{ cfssl_version }}/cfssljson_{{ cfssl_version }}_linux_amd64 -o {{ cfssl_dir }}/cfssljson
+        chmod +x {{ cfssl_dir }}/cfssl {{ cfssl_dir }}/cfssljson
+    when: not cfssl_stat.stat.exists or not cfssljson_stat.stat.exists
+
+  # Kubectl 工具检查与配置
+  - name: 检查 Kubectl 二进制文件
+    stat:
+      path: "{{ kubectl_dir }}/kubectl"
+    register: kubectl_stat
+
+  - name: 设置 Kubectl 文件权限
+    file:
+      path: "{{ kubectl_dir }}/kubectl"
+      mode: "0755"
+    when: kubectl_stat.stat.exists
+
+  - name: 提示安装 Kubectl 工具
+    fail:
+      msg: |
+        Kubectl 工具不存在，请安装 kubectl 工具。
+        可以使用以下命令：
+        mkdir -p {{ kubectl_dir }}
+        curl -LO https://dl.k8s.io/release/{{ kubernetes_version }}/bin/linux/amd64/kubectl -o {{ kubectl_dir }}/kubectl
+        chmod +x {{ kubectl_dir }}/kubectl
+    when: not kubectl_stat.stat.exists
+
+  rescue:
+  - name: 处理权限设置错误
+    fail:
+      msg: |
+        警告: 检测工具时发生错误
+        请确保满足以下条件:
+        1. CFSSL 工具安装在 {{ cfssl_dir }} 目录
+        2. Kubectl 工具安装在 {{ kubectl_dir }} 目录
+        3. 当前用户对这些目录有写入权限

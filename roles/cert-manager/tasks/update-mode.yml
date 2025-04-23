@@ -1,0 +1,24 @@
+---
+# 设置内部更新控制变量
+
+- name: 设置内部更新控制变量
+  set_fact:
+    # 根据 cert_update_mode 设置内部控制变量
+    _update_ca: "{{ cert_update_mode == 'ca_only' or cert_update_mode == 'all' }}"
+    _update_components: "{{ cert_update_mode == 'components_only' or cert_update_mode == 'all' }}"
+    _any_update: "{{ cert_update_mode != 'none' }}"
+
+- name: 显示当前更新模式
+  debug:
+    msg: |
+      当前证书更新模式: 
+      {% if _update_ca and _update_components %}
+      更新所有证书 (CA + 组件证书)
+      {% elif _update_ca %}
+      仅更新 CA 证书
+      {% elif _update_components %}
+      仅更新组件证书
+      {% else %}
+      不更新任何证书
+      {% endif %}
+  when: _any_update|bool

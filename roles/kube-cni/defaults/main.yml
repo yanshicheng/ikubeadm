@@ -1,0 +1,31 @@
+# 通用配置
+base_dir: "/opt/kubernetes"
+pod_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+registry: "registry.ikubeops.local"
+registry_project: "ikubeops"
+addon_deploy_pattern: "yaml" # yaml or helm
+
+# 集群的网络组件
+cluster_cni: "coredns"
+# 网络组件部署的命名空间
+cluster_cni_namespace: "calico-system"
+#  block size
+block_size: "24"
+
+### calico 相关 
+# calico 版本
+calico_version: "v3.29.3"
+# calico 网卡名称
+calico_interface: ""
+# calico 模式
+calico_mode: "bgp" # bgp， vxlan， ipip
+calico_bgp_rr: true
+calico_mtu: "0"
+calico_as_number: "64512"
+calico_registry_project: "calico"
+calico_node_image: "{{ registry }}/{{ calico_registry_project }}/node:{{ calico_version }}"
+cni_image: "{{ registry }}/{{ calico_registry_project }}/cni:{{ calico_version }}"
+calico_typha_image: "{{ registry }}/{{ calico_registry_project }}/typha:{{ calico_version }}"
+calico_kube_controllers_image: "{{ registry }}/{{ calico_registry_project }}/kube-controllers:{{ calico_version }}"
+calico_template_manifests_dir: "calico/manifests"

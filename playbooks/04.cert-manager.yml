@@ -1,0 +1,5 @@
+# 生成证书
+- hosts:
+  - localhost
+  roles:
+  - cert-manager

@@ -1,0 +1,56 @@
+{{ ansible_managed | comment }} 
+
+# 记录系统时钟增益/损失时间的速率
+driftfile {{ chrony_driftfile }}
+
+# 日志文件 
+logdir {{ chrony_log_dir }}
+log {{ chrony_log_options }}
+
+# 上游 NTP 服务器
+{% for server in chrony_ntp_servers %}
+server {{ server.server }} {{ server.options }}
+{% endfor %}
+
+# 允许系统时钟在前三次更新中步进
+# 如果其偏移量大于设定的阈值
+makestep {{ chrony_makestep_threshold }} {{ chrony_makestep_limit }}
+
+# 启用内核实时时钟(RTC)同步
+{% if chrony_rtcsync %}
+rtcsync
+{% endif %}
+
+# 硬件时间戳
+{% for interface in chrony_hwtimestamp_interfaces %}
+hwtimestamp {{ interface }}
+{% endfor %}
+
+# 服务器模式配置
+{% if chrony_server_mode %}
+# 允许这些网络的 NTP 客户端访问
+{% for network in chrony_allow_networks %}
+allow {{ network }}
+{% endfor %}
+
+# 即使未与时间源同步也提供时间服务
+local stratum {{ chrony_local_stratum }}
+{% endif %}
+
+# 安全设置
+keyfile /etc/chrony.keys
+{% if chrony_server_mode %}
+noclientlog
+{% endif %}
+
+# Use NTP sources found in /etc/chrony/sources.d.
+sourcedir {{ chrony_sourcedir }}
+# Save NTS keys and cookies.
+ntsdumpdir /var/lib/chrony
+# 防止错误估计影响系统时钟
+maxupdateskew {{ chrony_maxupdateskew }}
+
+# Get TAI-UTC offset and leap seconds from the system tz database.
+# This directive must be commented out when using time sources serving
+# leap-smeared time.
+leapsectz right/UTC

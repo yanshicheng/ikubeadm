@@ -1,0 +1,224 @@
+- name: 检查 kube-apiserver pod 是否在运行
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps -a | grep kube-apiserver | grep -v grep {% else %} {{base_dir}}/bin/docker ps -a | grep kube-apiserver | grep -v grep {% endif %}
+  register: apiserver_pod_status
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+  when: "'ikube_master' in group_names"
+
+- name: 检查 kube-controller-manager pod 是否在运行
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps -a | grep kube-controller-manager | grep -v grep {% else %} {{base_dir}}/bin/docker ps -a | grep kube-controller-manager | grep -v grep {% endif %}
+  register: controller_manager_pod_status
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+  when: "'ikube_master' in group_names"
+
+- name: 检查 kube-scheduler pod 是否在运行
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps -a | grep kube-scheduler | grep -v grep {% else %} {{base_dir}}/bin/docker ps -a | grep kube-scheduler | grep -v grep {% endif %}
+  register: scheduler_pod_status
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+  when: "'ikube_master' in group_names"
+
+- name: 分发 kube-apiserver 静态 Pod 描述文件
+  template:
+    src: "kube-apiserver.yaml.j2"
+    dest: "{{ kube_base_dir }}/manifests/kube-apiserver.yaml"
+    mode: '0644'
+    owner: root
+    group: root
+  register: apiserver_result
+  when: "'ikube_master' in group_names"
+
+- name: 强制重启 kube-apiserver
+  block:
+  - name: 创建临时目录 (apiserver)
+    file:
+      path: "/tmp/ikubeadm-tmp"
+      state: directory
+      mode: '0755'
+
+  - name: 移动 kube-apiserver 配置文件触发重启
+    shell: |
+      cp {{ kube_base_dir }}/manifests/kube-apiserver.yaml /tmp/ikubeadm-tmp/kube-apiserver.yaml.bak
+      rm {{ kube_base_dir }}/manifests/kube-apiserver.yaml
+      sleep 2
+      mv /tmp/ikubeadm-tmp/kube-apiserver.yaml.bak {{ kube_base_dir }}/manifests/kube-apiserver.yaml
+    when: apiserver_pod_status.rc == 0
+  when:
+  - "'ikube_master' in group_names"
+  - "apiserver_result is defined and apiserver_result.changed"
+
+- name: 分发 kube-controller-manager 静态 Pod 描述文件
+  template:
+    src: "kube-controller-manager.yml.j2"
+    dest: "{{ kube_base_dir }}/manifests/kube-controller-manager.yaml"
+    mode: '0644'
+    owner: root
+    group: root
+  register: controller_manager_result
+  when: "'ikube_master' in group_names"
+
+- name: 强制重启 kube-controller-manager
+  block:
+  - name: 创建临时目录 (controller-manager)
+    file:
+      path: "/tmp/ikubeadm-tmp"
+      state: directory
+      mode: '0755'
+
+  - name: 移动 kube-controller-manager 配置文件触发重启
+    shell: |
+      cp {{ kube_base_dir }}/manifests/kube-controller-manager.yaml /tmp/ikubeadm-tmp/kube-controller-manager.yaml.bak
+      rm {{ kube_base_dir }}/manifests/kube-controller-manager.yaml
+      sleep 2
+      mv /tmp/ikubeadm-tmp/kube-controller-manager.yaml.bak {{ kube_base_dir }}/manifests/kube-controller-manager.yaml
+    when: controller_manager_pod_status.rc == 0 # 只有在 pod 存在时才执行
+  when:
+  - "'ikube_master' in group_names"
+  - "controller_manager_result is defined and controller_manager_result.changed"
+
+- name: 分发 kube-scheduler 静态 Pod 描述文件
+  template:
+    src: "kube-scheduler.yaml.j2"
+    dest: "{{ kube_base_dir }}/manifests/kube-scheduler.yaml"
+    mode: '0644'
+    owner: root
+    group: root
+  register: scheduler_result
+  when: "'ikube_master' in group_names"
+
+- name: 强制重启 kube-scheduler
+  block:
+  - name: 创建临时目录 (scheduler)
+    file:
+      path: "/tmp/ikubeadm-tmp"
+      state: directory
+      mode: '0755'
+
+  - name: 移动 kube-scheduler 配置文件触发重启
+    shell: |
+      cp {{ kube_base_dir }}/manifests/kube-scheduler.yaml /tmp/ikubeadm-tmp/kube-scheduler.yaml.bak
+      rm {{ kube_base_dir }}/manifests/kube-scheduler.yaml
+      sleep 2
+      mv /tmp/ikubeadm-tmp/kube-scheduler.yaml.bak {{ kube_base_dir }}/manifests/kube-scheduler.yaml
+    when: scheduler_pod_status.rc == 0 # 只有在 pod 存在时才执行
+  when:
+  - "'ikube_master' in group_names"
+  - "scheduler_result is defined and scheduler_result.changed"
+
+- name: 等待所有 pod 启动完成
+  pause:
+    seconds: 10
+  when: "'ikube_master' in group_names"
+
+- name: 轮训检查 kube-apiserver 容器是否处于运行状态
+  shell: >
+    {% if container_runtime == "containerd" %} {{ base_dir }}/bin/crictl ps | grep kube-apiserver | grep -i Running |grep -v grep {% else %} {{ base_dir }}/bin/docker ps | grep kube-apiserver | grep -i Up | grep -v grep {% endif %}
+  register: kube_apiserver_running_status
+  until: kube_apiserver_running_status.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: 轮训检查 kube-controller-manager 容器是否处于运行状态
+  shell: >
+    {% if container_runtime == "containerd" %} {{ base_dir }}/bin/crictl ps | grep kube-controller-manager | grep -i Running |grep -v grep {% else %} {{ base_dir }}/bin/docker ps | grep kube-controller-manager | grep -i Up | grep -v grep {% endif %}
+  register: kube_controller_manager_running_status
+  until: kube_controller_manager_running_status.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: 轮训检查 kube-scheduler 容器是否处于运行状态
+  shell: >
+    {% if container_runtime == "containerd" %} {{ base_dir }}/bin/crictl ps | grep kube-scheduler| grep -i Running |grep -v grep {% else %} {{ base_dir }}/bin/docker ps | grep kube-scheduler | grep -i Up | grep -v grep {% endif %}
+  register: kkube_scheduler_running_status
+  until: kkube_scheduler_running_status.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: 等待 kube-apiserver 健康检查端点准备就绪
+  uri:
+    url: "https://127.0.0.1:{{ kube_apiserver_lb_port | default(6443) }}/healthz"
+    validate_certs: no
+    method: GET
+    return_content: yes
+    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+  register: apiserver_health_result
+  until: apiserver_health_result.status in [200, 403, 401] and apiserver_health_result.content == "ok"
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: 等待 kube-controller-manager 健康检查端点准备就绪
+  uri:
+    url: "https://127.0.0.1:{{ kube_controller_manager_port | default(10257) }}/healthz"
+    validate_certs: no
+    method: GET
+    return_content: yes
+    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+  register: controller_manager_health_result
+  until: controller_manager_health_result.status in [200, 403, 401] and controller_manager_health_result.content == "ok"
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: 等待 kube-scheduler 健康检查端点准备就绪
+  uri:
+    url: "https://127.0.0.1:{{ kube_scheduler_port | default(10259) }}/healthz"
+    validate_certs: no
+    method: GET
+    return_content: yes
+    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+  register: scheduler_health_result
+  until: scheduler_health_result.status in [200, 403, 401] and scheduler_health_result.content == "ok"
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: "'ikube_master' in group_names"
+
+- name: Master 节点添加 control-plane 标签
+  shell: |
+    {{ base_dir }}/bin/kubectl --kubeconfig {{ kube_base_dir }}/admin.kubeconfig  label node {{ ansible_nodename }} node-role.kubernetes.io/control-plane= --overwrite
+    {{ base_dir }}/bin/kubectl --kubeconfig {{ kube_base_dir }}/admin.kubeconfig  label node {{ ansible_nodename }} node-role.kubernetes.io/master= --overwrite
+    {{ base_dir }}/bin/kubectl --kubeconfig {{ kube_base_dir }}/admin.kubeconfig  cordon  {{ ansible_nodename }}
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  register: master_label_result
+  changed_when: master_label_result.rc == 0
+  failed_when: master_label_result.rc != 0 and 'already has a value' not in master_label_result.stderr
+  when: "'ikube_master' in group_names"
+
+- name: node 节点添加 node 标签
+  shell: |
+    {{ base_dir }}/bin/kubectl --kubeconfig {{ kube_base_dir }}/admin.kubeconfig label node {{ hostvars[item]['ansible_nodename'] }} node-role.kubernetes.io/node= --overwrite
+    {{ base_dir }}/bin/kubectl --kubeconfig {{ kube_base_dir }}/admin.kubeconfig label node {{ hostvars[item]['ansible_nodename'] }} node-role.kubernetes.io/worker= --overwrite
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  with_items: "{{ groups['ikube_node'] }}"
+  run_once: true
+  register: node_label_result
+  changed_when: node_label_result.rc == 0
+  failed_when: node_label_result.rc != 0 and 'already has a value' not in node_label_result.stderr
+
+- name: 获取 user:kubernetes 是否已经绑定对应角色
+  shell: "{{ base_dir }}/bin/kubectl get clusterrolebindings|grep kubernetes-crb || echo 'notfound'"
+  register: crb_info
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 创建 user:kubernetes 角色绑定
+  command: "{{ base_dir }}/bin/kubectl create clusterrolebinding kubernetes-crb --clusterrole=system:kubelet-api-admin --user=kubernetes"
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  when: "'notfound' in crb_info.stdout"

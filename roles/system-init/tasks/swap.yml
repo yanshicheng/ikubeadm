@@ -1,0 +1,33 @@
+---
+# 关闭 swap 的 Ansible 任务
+- name: 立即禁用系统 swap
+  command: swapoff -a
+  changed_when: false
+  tags:
+  - swap
+
+- name: 设置永久生效的 vm.swappiness=0
+  sysctl:
+    name: vm.swappiness
+    value: '0'
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.d/99-swap-settings.conf
+  tags:
+  - swap
+  - sysctl
+
+- name: 从 /etc/fstab 中禁用 swap 分区
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)'
+    replace: '# \1'
+    backup: yes
+  register: fstab_result
+  tags:
+  - swap
+
+- name: 确认 swap 已完全禁用
+  debug:
+    msg: "Swap 已成功关闭，vm.swappiness=0 已永久设置，且 swap 分区从 /etc/fstab 中移除"
+  when: fstab_result is changed

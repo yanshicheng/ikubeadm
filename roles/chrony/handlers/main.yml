@@ -1,0 +1,12 @@
+---
+# Chrony 角色的处理器
+
+- name: 重启 Chrony 服务
+  service:
+    name: "{{ chrony_service_name }}"
+    state: restarted
+
+- name: 重载防火墙
+  command: firewall-cmd --reload
+  when: firewalld_check is defined and firewalld_check.rc == 0
+  ignore_errors: true

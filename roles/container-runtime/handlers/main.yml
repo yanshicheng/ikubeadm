@@ -1,0 +1,45 @@
+---
+# ==========================================================================
+# 容器运行时安装角色 - handlers文件
+# 处理服务重启和systemd重载
+# ==========================================================================
+
+
+- name: start_and_enable_container_runtime
+  ansible.builtin.systemd:
+    name: "{{ container_runtime }}"
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+
+- name: start_and_enable_cri_docker_socket
+  ansible.builtin.systemd:
+    name: cri-docker.socket
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+
+- name: start_and_enable_cri_docker
+  ansible.builtin.systemd:
+    name: cri-docker.service
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+
+- name: reload_systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: reload_docker_socket
+  ansible.builtin.systemd:
+    name: docker.socket
+    daemon_reload: yes
+    state: restarted
+    enabled: yes
+
+- name: reload_docker_containerd
+  ansible.builtin.systemd:
+    name: containerd.service
+    daemon_reload: yes
+    state: restarted
+    enabled: yes

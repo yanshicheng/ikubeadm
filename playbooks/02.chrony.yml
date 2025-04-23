@@ -1,0 +1,6 @@
+- hosts:
+  - all
+  roles:
+  # - system-init
+  - { role: chrony, when: "groups['chrony']|length > 0" }
+  # - cert-generator

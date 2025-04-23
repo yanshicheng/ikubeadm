@@ -1,0 +1,40 @@
+- name: 检查是否是支持的 CNI 插件
+  ansible.builtin.assert:
+    that: cluster_cni in ['calico', 'cilium']
+    fail_msg: "cluster_cni 部署类型只能是 ['calico', 'cilium']"
+    success_msg: "集群 CNI 插件为: {{ cluster_cni }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: 检查部署模式
+  ansible.builtin.assert:
+    that: addon_deploy_pattern in ['yaml', 'helm']
+    fail_msg: "addon_deploy_pattern 部署类型只能是 ['yaml', 'helm']"
+    success_msg: "集群插件部署模式为: {{ addon_deploy_pattern }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: manifests 部署 CNI 组件
+  block:
+  - name: 部署 calico 组件
+    import_tasks: calico-manifests.yml
+    when:
+    - cluster_cni == "calico"
+  when:
+  - addon_deploy_pattern == "yaml"
+  - "'ikube_master' in group_names"
+
+- name: 分发 calicoctl 到 node 节点
+  copy:
+    src: "{{ calico_package_dir }}/calicoctl"
+    dest: "{{ base_dir }}/bin/calicoctl"
+    mode: '0755'
+  when:
+  - cluster_cni == "calico"
+  - "'ikube_node' in group_names"

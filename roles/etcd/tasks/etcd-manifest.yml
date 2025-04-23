@@ -1,0 +1,130 @@
+---
+- name: 检查本地 CA 证书是否存在
+  stat:
+    path: "{{ generate_certs_dir }}/pki/ca.pem1"
+  connection: local
+  run_once: true
+
+- name: 生成 etcd 证书请求文件
+  template:
+    src: etcd-csr.json.j2
+    dest: "{{ generate_certs_dir }}/pki/etcd-csr.json"
+    owner: root
+    group: root
+    mode: '0644'
+  connection: local
+  run_once: true
+  register: etcd_csr_result
+
+- name: 创建 etcd 证书和私钥
+  shell: |
+    cd {{ generate_certs_dir }}/pki &&  \
+     {{ cfssl_dir }}/cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=ca-config.json \
+    -profile=kubernetes \
+    etcd-csr.json | {{ cfssl_dir }}/cfssljson -bare etcd
+  connection: local
+  run_once: true
+  when: etcd_csr_result is changed
+
+# 新增任务：检查 etcd pod 是否已在运行
+- name: 检查 etcd pod 是否在运行
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps -a | grep etcd | grep -v grep {% else %} {{base_dir}}/bin/docker ps -a | grep etcd | grep -v grep {% endif %}
+  register: etcd_pod_status
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+
+- name: 分发 etcd 证书相关
+  copy:
+    src: "{{ generate_certs_dir }}/pki/{{ item}}"
+    dest: "{{ ca_dir }}/{{ item }}"
+  with_items:
+  - ca.pem
+  - etcd.pem
+  - etcd-key.pem
+  register: etcd_cert_copied
+
+- name: 确保 manifests 目录存在
+  file:
+    path: "{{ kube_base_dir }}/manifests"
+    state: directory
+    mode: '0755'
+
+- name: 确保 etcd 数据目录存在
+  file:
+    path: "{{ etcd_data_dir }}"
+    state: directory
+    mode: '0700'
+
+- name: 生成 etcd 静态 Pod 配置
+  template:
+    src: templates/etcd.yaml.j2
+    dest: "{{ kube_base_dir }}/manifests/etcd.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  register: etcd_config
+
+- name: 强制重启 etcd
+  block:
+  - name: 创建临时目录
+    file:
+      path: "/tmp/ikubeadm-tmp"
+      state: directory
+      mode: '0755'
+
+  - name: 移动 etcd 配置文件触发重启
+    shell: |
+      cp {{ kube_base_dir }}/manifests/etcd.yaml /tmp/ikubeadm-tmp/etcd.yaml.bak
+      rm {{ kube_base_dir }}/manifests/etcd.yaml
+      sleep 2
+      mv /tmp/ikubeadm-tmp/etcd.yaml.bak {{ kube_base_dir }}/manifests/etcd.yaml
+    when: etcd_pod_status.rc == 0
+  when:
+  - "(etcd_cert_copied is defined and etcd_cert_copied.changed) or (etcd_config is defined and etcd_config.changed)"
+
+- name: 等待 etcd pod 启动
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps | grep etcd | grep -v grep | grep -q Running {% else %} {{base_dir}}/bin/docker ps | grep etcd | grep -v grep   | grep -q Up {% endif %}
+  register: etcd_container_status
+  until: etcd_container_status.rc == 0
+  retries: 12
+  delay: 10
+  changed_when: false
+
+- name: 轮训检查 etcd 端口可访问
+  wait_for:
+    host: "{{ item }}"
+    port: 2379
+    state: started
+    timeout: 120
+  connection: local
+  loop: "{{ groups['etcd'] }}"
+  register: etcd_port_results
+
+- name: 获取 etcd 容器 ID
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps | grep etcd | grep -v grep | awk '{print $1}' {% else %} {{base_dir}}/bin/docker ps | grep etcd |grep -v pause | grep -v grep | awk '{print $1}' {% endif %}
+  register: etcd_container_id
+  delegate_to: "{{ groups['etcd'][0] }}"
+  changed_when: false
+  run_once: true
+
+- name: 检查 etcd 集群状态
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl exec {{ etcd_container_id.stdout }} etcdctl --endpoints=https://127.0.0.1:2379  --cacert={{ ca_dir }}/ca.pem  --cert={{ ca_dir }}/etcd.pem  --key={{ ca_dir }}/etcd-key.pem  member list -w table {% else %} {{base_dir}}/bin/docker exec {{ etcd_container_id.stdout }} etcdctl --endpoints=https://127.0.0.1:2379  --cacert={{ ca_dir }}/ca.pem  --cert={{ ca_dir }}/etcd.pem  --key={{ ca_dir }}/etcd-key.pem  member list -w table {% endif %}
+  register: etcd_status
+  changed_when: false
+  delegate_to: "{{ groups['etcd'][0] }}"
+  run_once: true
+
+- name: etcd 集群状态
+  debug:
+    var: etcd_status.stdout_lines
+  delegate_to: "{{ groups['etcd'][0] }}"
+  changed_when: false
+  run_once: true

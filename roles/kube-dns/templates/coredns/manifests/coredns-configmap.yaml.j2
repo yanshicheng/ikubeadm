@@ -1,0 +1,30 @@
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: {{ cluster_dns_namespace }}
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+           lameduck 5s
+        }
+        ready
+        kubernetes {{ cluster_dns_domain }} in-addr.arpa ip6.arpa {
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+           ttl 30
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30 {
+           disable success {{ cluster_dns_domain }}
+           disable denial {{ cluster_dns_domain }}
+        }
+        loop
+        reload
+        loadbalance
+    }

@@ -1,0 +1,17 @@
+server = "{{ registry_url }}"
+
+[host."{{ registry_url }}"]
+  capabilities = ["push", "pull", "resolve"]
+{% set reg_config = namespace(found=false, config={}) %}
+{% for reg in container_insecure_registries | default([]) %}
+{% if reg.hosts == registry_url %}
+    {% set reg_config.found = true %}
+    {% set reg_config.config = reg %}
+{% endif %}
+{% endfor %}
+{% if reg_config.found and reg_config.config.cert_auth | default(false) | bool %}
+  ca = "ca.crt"
+  skip_verify = false
+{% else %}
+  skip_verify = true
+{% endif %}

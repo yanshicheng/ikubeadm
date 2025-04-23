@@ -1,0 +1,59 @@
+---
+# 优化设置 journal 日志相关，避免日志重复搜集，浪费系统资源
+# 针对 CentOS/RHEL 系列的操作
+- name: CentOS/RHEL 系列日志优化
+  block:
+  - name: 禁止 rsyslog 获取 journald 日志1
+    lineinfile:
+      dest: /etc/rsyslog.conf
+      state: present
+      regexp: 'ModLoad imjournal'
+      line: '#$ModLoad imjournal # provides access to the systemd journal'
+    notify: "重启 syslog 服务"
+    ignore_errors: true
+
+  - name: 禁止 rsyslog 获取 journald 日志2
+    lineinfile:
+      dest: /etc/rsyslog.conf
+      state: present
+      regexp: 'IMJournalStateFile'
+      line: '#$IMJournalStateFile imjournal.state'
+    notify: "重启 syslog 服务"
+    ignore_errors: true
+  when: ansible_os_family in centos_family
+  tags: journal
+
+- name: 准备 journal 日志相关目录
+  file:
+    name: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+  - "/etc/systemd/journald.conf.d"
+  - "/var/log/journal"
+  tags: journal
+
+- name: 优化设置 journal 日志
+  template:
+    src: 95-k8s-journald.conf.j2
+    dest: /etc/systemd/journald.conf.d/95-k8s-journald.conf
+    mode: '0644'
+  notify: "重启 journald 服务"
+  tags: journal
+
+- name: 启动 journal 服务
+  service:
+    name: systemd-journald
+    state: started
+    enabled: yes
+  ignore_errors: true
+  tags: journal
+
+- name: 启动 rsyslog 服务
+  service:
+    name: rsyslog
+    state: started
+    enabled: yes
+  ignore_errors: true
+  tags: journal
+  when: ansible_os_family in centos_family

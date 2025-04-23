@@ -1,0 +1,58 @@
+- name: 准备 kube-scheduler 证书签名请求
+  template:
+    src: kube-scheduler-csr.json.j2
+    dest: "{{ local_pki_dir }}/kube-scheduler-csr.json"
+  register: csr_template_result
+
+- name: 检查 kube-scheduler 证书是否存在
+  stat:
+    path: "{{ local_pki_dir }}/kube-scheduler.pem"
+  register: scheduler_pem_stat
+
+- name: 创建 kube-scheduler 证书
+  shell: |
+    cd {{ local_pki_dir }} && \
+    {{ cfssl_dir }}/cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=ca-config.json \
+    -profile=kubernetes \
+    kube-scheduler-csr.json | {{ cfssl_dir }}/cfssljson -bare kube-scheduler
+  register: cert_creation_result
+  changed_when: cert_creation_result.rc == 0
+  failed_when: cert_creation_result.rc != 0 and "already exists" not in cert_creation_result.stderr
+  when: >
+    csr_template_result.changed or not scheduler_pem_stat.stat.exists or _update_components|bool
+
+- name: 检查 scheduler kubeconfig 是否存在
+  stat:
+    path: "{{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig"
+  register: scheduler_kubeconfig_stat
+
+- name: 配置 scheduler kubeconfig
+  shell: |
+    # 设置集群参数
+    {{ kubectl_dir }}/kubectl config set-cluster {{ cluster_name }} \
+    --certificate-authority={{ local_pki_dir }}/ca.pem \
+    --embed-certs=true \
+    --server={{ kube_apiserver }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig && \
+
+    # 设置认证参数
+    {{ kubectl_dir }}/kubectl config set-credentials system:kube-scheduler \
+    --client-certificate={{ local_pki_dir }}/kube-scheduler.pem \
+    --client-key={{ local_pki_dir }}/kube-scheduler-key.pem \
+    --embed-certs=true \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig && \
+
+    # 设置上下文参数
+    {{ kubectl_dir }}/kubectl config set-context {{ context_name }} \
+    --cluster={{ cluster_name }} \
+    --user=system:kube-scheduler \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig && \
+
+    # 选择默认上下文
+    {{ kubectl_dir }}/kubectl config use-context {{ context_name }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-scheduler.kubeconfig
+  when: >
+    not scheduler_kubeconfig_stat.stat.exists or _update_components|bool or _update_ca|bool or cert_creation_result.changed

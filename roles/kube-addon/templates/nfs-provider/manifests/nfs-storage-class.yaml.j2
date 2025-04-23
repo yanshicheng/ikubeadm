@@ -1,0 +1,18 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+    name: {{ nfs_storeage_class_name }}
+    annotations:
+        storageclass.kubernetes.io/is-default-class: "true"
+        csi.storage.k8s.io/provisioner-secret-name: "mount-options"
+        csi.storage.k8s.io/provisioner-secret-namespace: "{{ nfs_namespace }}"
+provisioner: nfs.csi.k8s.io
+reclaimPolicy: {{ nfs_storeage_reclaim_policy }} 
+volumeBindingMode: {{ nfs_storeage_volume_bind_mode }}
+parameters:
+    server: {{ nfs_server }}
+    share: {{ nfs_share_path }}
+mountOptions:
+{% for option in nfs_storeage_mount_options.split(',') %}
+  - {{ option }}
+{% endfor %}

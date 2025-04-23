@@ -1,0 +1,22 @@
+
+
+
+# 架构映射
+arch_mapping:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm32
+  default: amd64
+
+# 控制端 软件包位置
+kubernetes_version: "v1.32.3"
+current_arch: "{{ arch_mapping[ansible_architecture] | default(arch_mapping.default) }}"
+package_dir: "{{ [playbook_dir | dirname, 'packages'] | path_join }}"
+kubernetes_bin_dir: "{{ package_dir }}/kubernetes/{{ kubernetes_version }}/{{ current_arch }}"
+
+# 控制端 证书相关路径
+# 证书生成路径相关变量
+deploy_name: "example"
+generate_certs_dir: "{{ [playbook_dir | dirname, 'deploy', deploy_name] | path_join }}"
+local_pki_dir: "{{ generate_certs_dir }}/pki"
+local_kubeconfig_dir: "{{ generate_certs_dir }}/kubeconfig"

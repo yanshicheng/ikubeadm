@@ -1,0 +1,45 @@
+---
+# 系统初始化角色的默认变量
+# 默认时区
+timezone: "Asia/Shanghai"
+# 历史命令保存数量
+hist_size: 5000
+
+# 其他的自定义 hosts 静态解析可以写在这里
+custom_hosts:
+- ip: "192.168.1.100"
+  hostname: "www.example1.com"
+- ip: "192.168.1.101"
+  hostname: "wwww.example2.com"
+# 安装 kubernetes 使用的镜像仓库地址
+registry: registry.ikubeops.local
+# 镜像地址 对应的域名，如果未指定则是 ansible 控制节点地址。
+registry_ip: ""
+
+############################ 子 task 开关 ############################
+enable_audit: true
+disable_firewall: true
+# 是否禁用SELinux
+disable_selinux: true
+# 是否加载 ipvs 模块
+enable_ipvs: true
+# 优化历史命令
+enable_history_optimization: true
+# 优化日志
+enable_log_optimization: true
+# 优化内核参数
+enable_kernel_optimization: true
+# 优化系统limit
+enable_system_limit_optimization: true
+# 启用 nfs-client
+enable_nfs_client: false
+# 启用 安装软件包
+enable_install_packages: true
+# 启用 重置主机名
+enable_reset_hostname: true
+# 启用 时区
+enable_timezone: true
+# 启用 优化 vim
+enable_vim_optimization: true
+
+centos_family: [ 'CentOS', 'RedHat', 'Rocky', 'AlmaLinux', 'EulerOS' ]

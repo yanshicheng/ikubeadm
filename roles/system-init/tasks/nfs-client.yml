@@ -1,0 +1,51 @@
+---
+- name: 设置 NFS 锁定服务名称变量
+  set_fact:
+    nfs_lock_service: >-
+      {%- if ansible_os_family in ['Debian'] -%}
+        rpc-statd
+      {%- elif ansible_os_family in centos_family and ansible_distribution_major_version | int <= 7 -%}
+        nfslock
+      {%- else -%}
+        rpc-statd
+      {%- endif -%}
+- name: 安装和配置 NFS 客户端
+  block:
+
+  # 共同的配置任务 - 启用并启动 rpcbind 服务
+  - name: 启用并启动 rpcbind 服务
+    systemd:
+      name: rpcbind
+      state: started
+      enabled: true
+
+  # Debian/Ubuntu 系列的 NFS 锁定服务
+  - name: 启用并启动 NFS 锁定服务
+    systemd:
+      name: "{{ nfs_lock_service }}"
+      state: started
+      enabled: true
+
+  # 简化的服务状态检查
+  - name: 检查 rpcbind 服务状态
+    command: systemctl is-active rpcbind
+    register: rpcbind_status
+    changed_when: false
+    check_mode: false
+    failed_when: false
+
+  - name: 显示 rpcbind 服务状态
+    debug:
+      msg: "rpcbind 服务状态: {{ rpcbind_status.stdout }}"
+
+  # 检查 NFS 锁定服务状态
+  - name: 检查 NFS 锁定服务状态
+    command: "systemctl is-active {{ nfs_lock_service }}"
+    register: nfs_lock_status
+    changed_when: false
+    check_mode: false
+    failed_when: false
+
+  - name: 显示 NFS 锁定服务状态
+    debug:
+      msg: "NFS 锁定服务 ({{ nfs_lock_service }}) 状态: {{ nfs_lock_status.stdout }}"

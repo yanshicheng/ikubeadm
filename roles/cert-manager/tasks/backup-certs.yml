@@ -1,0 +1,49 @@
+---
+# 在更新证书前备份原有证书和配置
+# 只在更新操作时执行备份，且只备份实际存在的目录
+- name: 获取当前日期
+  command: date "+%Y%m%d%H%M%S"
+  register: date_output
+  changed_when: false
+  check_mode: no
+
+- name: 设置备份目录
+  set_fact:
+    backup_dir: "{{ generate_certs_dir }}/backup-cert/{{ date_output.stdout }}"
+
+- name: 检查是否存在原证书目录
+  stat:
+    path: "{{ generate_certs_dir }}"
+  register: cert_dir_stat
+
+- name: 备份现有证书和配置
+  block:
+  - name: 创建备份目录
+    file:
+      path: "{{ backup_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: 检查 pki 目录是否存在
+    stat:
+      path: "{{ local_pki_dir }}"
+    register: pki_dir_stat
+
+  - name: 备份 pki 目录
+    command: cp -r {{ local_pki_dir }} {{ backup_dir }}/
+    when: pki_dir_stat.stat.exists and pki_dir_stat.stat.isdir
+
+  - name: 检查 kubeconfig 目录是否存在
+    stat:
+      path: "{{ local_kubeconfig_dir }}"
+    register: kubeconfig_dir_stat
+
+  - name: 备份 kubeconfig 目录
+    command: cp -r {{ local_kubeconfig_dir }} {{ backup_dir }}/
+    when: kubeconfig_dir_stat.stat.exists and kubeconfig_dir_stat.stat.isdir
+
+  - name: 提示备份完成
+    debug:
+      msg: "原证书和配置已备份到 {{ backup_dir }}"
+  # 只有在更新模式且原目录存在时才备份
+  when: _any_update|bool and cert_dir_stat.stat.exists

@@ -1,0 +1,53 @@
+---
+- name: 加载系统级环境变量
+  include_vars: "{{ ansible_os_family }}.yml"
+  tags:
+  - always
+
+# 检查是否需要部署 chrony 服务器
+- name: 检查是否需要部署 chrony 服务器
+  set_fact:
+    deploy_chrony_server: "{{ CHRONY_SERVER_DEPLOY | default(true) | bool }}"
+  when: inventory_hostname in groups['chrony']
+  tags:
+  - always
+
+- name: 安装 Chrony
+  import_tasks: install.yml
+  tags:
+  - install
+  - chrony
+  - server
+  - client
+
+- name: 配置 Chrony 服务器
+  import_tasks: configure.yml
+  when: inventory_hostname in groups['chrony'] and deploy_chrony_server | default(true) | bool
+  tags:
+  - configure
+  - chrony
+  - server
+
+- name: 配置 Chrony 客户端
+  import_tasks: configure.yml
+  when: inventory_hostname not in groups['chrony'] or not deploy_chrony_server | default(true) | bool
+  tags:
+  - configure
+  - chrony
+  - client
+
+- name: 配置防火墙
+  import_tasks: firewall.yml
+  when: (chrony_configure_firewall | bool) and (inventory_hostname in groups['chrony']) and (deploy_chrony_server | default(true) | bool)
+  tags:
+  - firewall
+  - chrony
+  - server
+
+- name: 管理 Chrony 服务
+  import_tasks: service.yml
+  tags:
+  - service
+  - chrony
+  - server
+  - client

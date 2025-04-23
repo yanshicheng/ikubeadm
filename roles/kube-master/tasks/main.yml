@@ -1,0 +1,30 @@
+- name: 检查部署模式是否有效
+  fail:
+    msg: "控制组件部署模式 {{ control_deploy_pattern }} 无效，只支持 'pod' 或 'binary'"
+  when: control_deploy_pattern not in ['manifest', 'systemd']
+  connection: local
+  run_once: true
+
+- name: 证书分发
+  import_tasks: cert-distribution.yml
+  when: "'ikube_master' in group_names or 'ikube_node' in group_names"
+  tags:
+  - cert-distribution
+
+- name: 使用静态 Pod 方式部署控制组件
+  import_tasks: static-pod.yml
+  when: control_deploy_pattern == 'manifest'
+  tags:
+  - static-pod
+
+- name: 使用 二进制 方式部署控制组件
+  import_tasks: systemd-deploy.yml
+  when: control_deploy_pattern == 'systemd'
+  tags:
+  - systemd-deploy
+
+- name: 使用 (daemonset) 方式 部署 kube-proxy
+  import_tasks: kube-proxy-pod.yml
+  when: control_deploy_pattern == 'manifest'
+  tags:
+  - kube-proxy-pod

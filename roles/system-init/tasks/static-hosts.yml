@@ -1,0 +1,75 @@
+# 获取 Ansible 控制节点 IP 地址
+- name: 获取 Ansible 控制节点 IP 地址
+  setup:
+    filter: ansible_default_ipv4
+  delegate_to: localhost
+  run_once: true
+  register: control_node_facts
+  ignore_errors: true
+
+- name: 设置控制节点 IP 变量
+  set_fact:
+    ansible_control_node_ip: "{{ control_node_facts.ansible_facts.ansible_default_ipv4.address if (control_node_facts is succeeded and control_node_facts.ansible_facts.ansible_default_ipv4 is defined) else '127.0.0.1' }}"
+  run_once: true
+
+# 在所有主机上分发控制节点 IP
+- name: 在所有主机上设置控制节点 IP
+  set_fact:
+    ansible_control_node_ip: "{{ hostvars[groups['all'][0]]['ansible_control_node_ip'] | default('127.0.0.1') }}"
+
+# 调试输出，确认值已设置
+- name: 确认控制节点IP值
+  debug:
+    msg: "已设置控制节点IP为: {{ ansible_control_node_ip }}"
+
+# 创建新变量 registry_ip_effective 而不是修改 registry_ip
+- name: 创建 registry_ip_effective 变量
+  set_fact:
+    registry_ip_effective: "{{ ansible_control_node_ip }}"
+
+# 调试查看 registry_ip_effective
+- name: 确认 registry_ip_effective 值
+  debug:
+    msg: "registry_ip_effective 值为: {{ registry_ip_effective }}"
+
+# 设置registry主机名（去掉端口号）
+- name: 设置 registry 主机名
+  set_fact:
+    registry_hostname: "{{ registry | regex_replace(':.*$', '') }}"
+  when: registry is defined and registry | length > 0
+
+# 添加自定义主机记录到 /etc/hosts
+- name: 添加自定义主机记录到 /etc/hosts
+  lineinfile:
+    path: "/etc/hosts"
+    regexp: "^{{ item.ip }}\\s+{{ item.hostname }}(\\s|$)"
+    line: "{{ item.ip }} {{ item.hostname }}"
+    state: present
+  loop: "{{ custom_hosts | default([]) }}"
+  become: true
+  when: custom_hosts is defined and custom_hosts | length > 0
+
+# 添加 registry 记录到 /etc/hosts，使用 registry_ip_effective
+- name: 添加 registry 记录到 hosts 文件
+  lineinfile:
+    path: "/etc/hosts"
+    regexp: "^{{ registry_ip_effective }}\\s+{{ registry_hostname }}(\\s|$)"
+    line: "{{ registry_ip_effective }} {{ registry_hostname }}"
+    state: present
+  become: true
+  when: registry is defined and registry | length > 0
+
+# 直接添加所有节点互相解析
+- name: 添加所有节点的互相解析到 hosts 文件
+  lineinfile:
+    path: "/etc/hosts"
+    regexp: "^{{ item }}\\s+{{ hostvars[item]['ansible_hostname'] }}"
+    line: "{{ item }} {{ hostvars[item]['ansible_hostname'] }} {{ hostvars[item]['ansible_nodename'] }}"
+    state: present
+  loop: "{{ groups['all'] }}"
+  become: true
+  when:
+  - item != 'localhost'
+  - item != '127.0.0.1'
+  - hostvars[item]['ansible_hostname'] is defined
+  - hostvars[item]['ansible_nodename'] is defined or hostvars[item]['ansible_default_ipv4'] is defined

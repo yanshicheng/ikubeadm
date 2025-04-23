@@ -1,0 +1,140 @@
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    cacheTTL: 2m0s 
+    enabled: true
+  x509:
+    clientCAFile: {{ ca_dir }}/ca.pem
+# 授权配置
+authorization:
+  mode: Webhook
+  webhook:
+    cacheAuthorizedTTL: 5m0s
+    cacheUnauthorizedTTL: 30s
+cgroupDriver: {{ cgroup_driver }}
+cgroupsPerQOS: true
+clusterDNS:
+{% if enable_local_dns_cache %}
+  - {{ local_dns_cache }}
+{% endif %}
+  - {{ cluster_dns_svc_ip }}
+clusterDomain: {{ cluster_dns_domain }}
+configMapAndSecretChangeDetectionStrategy: Watch
+# 容器日志配置
+containerLogMaxFiles: 5
+containerLogMaxSize: 50Mi
+# 资源限制配置
+enforceNodeAllocatable:
+  - pods
+{% if kube_reserved_enabled == "yes" %}
+  - kube-reserved
+{% endif %}
+{% if sys_reserved_enabled == "yes" %}
+  - system-reserved
+{% endif %}
+# API请求设置
+eventBurst: 50
+eventRecordQPS: 30
+# 驱逐策略设置 
+evictionHard:
+  imagefs.available: 10%
+  memory.available: 500Mi 
+  nodefs.available: 5%
+  nodefs.inodesFree: 5%
+# 驱逐压力转换期 - 给容器更多时间优雅终止
+evictionPressureTransitionPeriod: 5m0s
+# 软驱逐策略 - 生产环境应增加软驱逐设置
+evictionSoft:
+  imagefs.available: 15%
+  memory.available: 1Gi
+  nodefs.available: 10%
+  nodefs.inodesFree: 10%
+evictionSoftGracePeriod:
+  imagefs.available: 2m0s
+  memory.available: 2m0s
+  nodefs.available: 2m0s
+  nodefs.inodesFree: 2m0s
+# 驱逐最小重新声明时间
+evictionMinimumReclaim:
+  imagefs.available: 10%
+  memory.available: 100Mi
+  nodefs.available: 5%
+failSwapOn: true
+fileCheckFrequency: 40s
+hairpinMode: hairpin-veth 
+healthzBindAddress: 127.0.0.1
+healthzPort: 10248
+httpCheckFrequency: 40s
+# 镜像垃圾回收设置
+imageGCHighThresholdPercent: 85
+imageGCLowThresholdPercent: 80
+imageMaximumGCAge: 48h0m0s
+imageMinimumGCAge: 2m0s
+{% if kube_reserved_enabled == "yes" %}
+kubeReservedCgroup: /podruntime.slice
+kubeReserved:
+  cpu: 500m
+  memory: 1000Mi
+  pid: "1000"
+{% endif %}
+kubeAPIBurst: 100
+kubeAPIQPS: 50
+makeIPTablesUtilChains: true
+maxOpenFiles: 1000000
+maxParallelImagePulls: 10
+maxPods: {{ max_pods }}
+# 设置容器运行时端点 - 从命令行移到配置文件
+{% if container_runtime == "containerd" %}
+containerRuntimeEndpoint: "unix:///run/containerd/containerd.sock"
+{% elif container_runtime == "docker" %}
+containerRuntimeEndpoint: "unix:///var/run/cri-dockerd/cri-dockerd.sock"
+{% else %}
+containerRuntimeEndpoint: "{{ container_runtime_endpoint | default('unix:///run/containerd/containerd.sock') }}"
+{% endif %}
+cpuManagerReconcilePeriod: 10s
+cpuManagerPolicy: none
+#kubeReserved:
+#  cpu: "1" 
+#systemReserved:
+#  cpu: "0.5"
+kind: KubeletConfiguration
+logging:
+  flushFrequency: 5s 
+  verbosity: 1  
+# 内存交换设置
+memorySwap:
+  swapBehavior: LimitedSwap   
+nodeLeaseDurationSeconds: 40
+nodeStatusReportFrequency: 5m0s 
+nodeStatusUpdateFrequency: 10s
+oomScoreAdj: -999
+podPidsLimit: {{ pod_max_pids }}
+port: 10250
+readOnlyPort: 0 
+resolvConf: /run/systemd/resolve/resolv.conf
+runtimeRequestTimeout: 2m0s
+serializeImagePulls: false
+streamingConnectionIdleTimeout: 4h0m0s
+syncFrequency: 1m0s
+{% if sys_reserved_enabled == "yes" %}
+systemReservedCgroup: /system.slice
+systemReserved:
+  cpu: 500m
+  memory: 1000Mi
+  pid: "5000"
+{% endif %}
+# 优雅关闭设置
+shutdownGracePeriod: 30s 
+shutdownGracePeriodCriticalPods: 10s
+# 静态Pod路径
+staticPodPath: {{ kube_base_dir }}/manifests
+# 容器运行时设置
+volumeStatsAggPeriod: 1m0s 
+# TLS证书设置
+tlsCertFile: {{ ca_dir }}/kubelet.pem
+tlsPrivateKeyFile: {{ ca_dir }}/kubelet-key.pem
+# 污点管理
+registerWithTaints: []
+

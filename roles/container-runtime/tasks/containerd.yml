@@ -1,0 +1,245 @@
+---
+# ==========================================================================
+# Containerd安装任务文件
+# 包含Containerd及其组件的安装、配置和服务管理
+# ==========================================================================
+
+- name: 创建必要的目录
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+  - /etc/containerd
+  - /etc/containerd/certs.d
+  - "{{ base_dir }}/containerd"
+  - "{{ base_dir }}/cni/bin"
+  - "{{ base_dir }}/cni/cache"
+  - "/etc/cni/net.d"
+  - "{{ base_dir }}/nri/plugins"
+  - "{{ base_dir }}/nri/conf.d"
+  - /var/run/nri
+  - /run/nri
+  - /var/run/containerd/
+  - /run/containerd/
+  - /etc/buildkit
+  - /etc/nerdctl
+  tags:
+  - install
+
+- name: 安装 CNI 插件
+  ansible.builtin.unarchive:
+    src: "{{ cni_plugins_package }}"
+    dest: "{{ base_dir }}/cni/bin"
+    mode: '0755'
+  register: cni_install
+  tags:
+  - install
+  - cni
+
+# 添加环境变量配置
+- name: 添加二进制目录到系统环境变量
+  lineinfile:
+    path: /etc/profile.d/999-ikubesop-k8s.sh
+    regexp: '^export PATH={{ base_dir }}/bin:\$PATH'
+    line: 'export PATH={{ base_dir }}/bin:$PATH'
+    create: yes
+    mode: 644
+  tags: kubernetes_env
+
+- name: 分发 containerd 工具
+  ansible.builtin.unarchive:
+    src: "{{ containerd_package }}"
+    dest: "{{ base_dir }}/"
+  failed_when: false
+  register: containerd_extract
+  tags:
+  - install
+
+- name: 分发 crictl 工具
+  ansible.builtin.unarchive:
+    src: "{{ crictl_package }}"
+    dest: "{{ base_dir }}/bin"
+    mode: '0755'
+  register: crictl_install
+  tags:
+  - install
+  - crictl
+
+- name: 生成仓库列表
+  ansible.builtin.set_fact:
+    registry_list: >-
+      {{ container_insecure_registries | default([]) | map(attribute='hosts') | list + ['http://registry.ikubeops.local:5000'] | unique }}
+    cert_required_registries: >-
+      {{ container_insecure_registries | default([]) | selectattr('cert_auth', 'defined') | selectattr('cert_auth') | map(attribute='hosts') | list }}
+  delegate_to: localhost
+  run_once: true
+
+# 检查证书文件是否存在
+- name: 检查仓库证书文件
+  ansible.builtin.stat:
+    path: "{{ registry_certs_dir }}/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}"
+  register: cert_check
+  loop: "{{ cert_required_registries }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: 缺少仓库 ca 证书
+  ansible.builtin.fail:
+    msg: |
+      以下仓库配置了 cert_auth=true 但找不到证书文件:
+      {% for result in cert_check.results %}
+        {% if not result.stat.exists %}
+          - {{ result.item }}
+          请在 {{ registry_certs_dir }}/{{ result.item | regex_replace('https?://(.+)(:.*)?', '\1') }}  目录放置ca.crt文件
+           或者将此仓库的 cert_auth 设置为 false
+        {% endif %}
+      {% endfor %}
+  when: cert_check.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: 创建仓库证书目录
+  ansible.builtin.file:
+    path: "/etc/containerd/certs.d/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ registry_list }}"
+
+# 为每个注册表创建hosts.toml配置
+- name: 生成仓库 hosts.toml 文件
+  ansible.builtin.template:
+    src: "containerd/hosts.toml.j2"
+    dest: "/etc/containerd/certs.d/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}/hosts.toml"
+    mode: '0644'
+  vars:
+    registry_url: "{{ item }}"
+  loop: "{{ registry_list }}"
+
+# 分发仓库证书
+- name: 分发仓库 ca 证书
+  ansible.builtin.copy:
+    src: "{{ registry_certs_dir }}/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}/ca.crt"
+    dest: "/etc/containerd/certs.d/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}/ca.crt"
+    mode: '0644'
+  loop: "{{ cert_required_registries }}"
+  when: cert_required_registries | length > 0
+
+- name: 生成 containerd systemd 服务文件
+  ansible.builtin.template:
+    src: containerd/containerd.service.j2
+    dest: /etc/systemd/system/containerd.service
+    mode: '0644'
+    backup: yes
+  register: containerd_service
+  tags:
+  - config
+
+- name: 生成 containerd 配置文件
+  ansible.builtin.template:
+    src: containerd/config.toml.j2
+    dest: /etc/containerd/config.toml
+    mode: '0644'
+    backup: yes
+  register: containerd_config
+  notify: start_and_enable_container_runtime
+  tags:
+  - config
+
+- name: 生成 crictl 配置文件
+  ansible.builtin.template:
+    src: containerd/crictl.yaml.j2
+    dest: /etc/crictl.yaml
+    mode: '0644'
+    backup: yes
+  tags:
+  - config
+
+# 安装 nerdctl（可选）
+- name: 安装 nerdctl 工具
+  block:
+  - name: 分发 nerdctl 工具
+    ansible.builtin.unarchive:
+      src: "{{ nerdctl_package }}"
+      dest: "{{ base_dir }}/bin"
+      mode: '0755'
+    register: nerdctl_install
+
+  - name: 生成 nerdctl 配置文件
+    ansible.builtin.template:
+      src: containerd/nerdctl.toml.j2
+      dest: /etc/nerdctl/nerdctl.toml
+  when: install_nerdctl | default(true)
+  tags:
+  - install
+  - nerdctl
+
+# 安装 buildkit（可选）
+
+- name: 安装 buildkit
+  block:
+  - name: 分发 buildkit 工具
+    ansible.builtin.unarchive:
+      src: "{{ buildkit_package }}"
+      dest: "{{ base_dir }}/"
+    register: buildkit_extract
+
+  - name: 生成 buildkitd 配置文件
+    ansible.builtin.template:
+      src: containerd/buildkitd.toml.j2
+      dest: /etc/buildkit/buildkitd.toml
+      mode: '0644'
+      backup: yes
+    register: buildkit_config
+  tags:
+  - install
+  - buildkit
+  when: install_buildkit | default(true)
+
+- name: 启动 containerd 服务
+  ansible.builtin.systemd:
+    name: "{{ container_runtime }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: 轮询等待 containerd 服务运行
+  ansible.builtin.shell: "systemctl is-active containerd.service"
+  register: cri_docker_status
+  until: '"active" in cri_docker_status.stdout'
+  retries: 8
+  delay: 2
+  changed_when: false
+  tags:
+  - service
+  - upgrade_docker
+
+- name: 显示服务安装和启动总结
+  ansible.builtin.debug:
+    msg:
+    - "============================================================"
+    - "Containerd 部署状态报告"
+    - "============================================================"
+    - "基础服务状态："
+    - "{{ '✅ Containerd: ' + cri_docker_status.stdout if cri_docker_status is defined else '❓ Containerd: 状态未检测' }}"
+    - "📁 安装目录: {{ base_dir | default('/opt/kube') }}/bin"
+    - ""
+    - "组件安装状态："
+    - "{{ '✅ crictl: ' + ('已安装 (新)' if crictl_install.changed else '已存在 (无变化)') if crictl_install is defined else '❓ crictl: 安装状态未知' }}"
+    - "{{ '✅ containerd: ' + ('已安装 (新)' if containerd_extract.changed else '已存在 (无变化)') if containerd_extract is defined else '❓ containerd: 安装状态未知' }}"
+    - "{{ '✅ nerdctl: ' + ('已安装 (新)' if nerdctl_install.changed else '已存在 (无变化)') if nerdctl_install is defined else '❌ nerdctl: 未安装 (配置已禁用)' if not install_nerdctl | default(true) else '❓ nerdctl: 安装状态未知' }}"
+    - "{{ '✅ buildkit: ' + ('已安装 (新)' if buildkit_extract.changed else '已存在 (无变化)') if buildkit_extract is defined else '❌ buildkit: 未安装 (配置已禁用)' if not install_buildkit | default(true) else '❓ buildkit: 安装状态未知' }}"
+    - ""
+    - "配置文件状态："
+    - "{{ '✅ 主配置: ' + ('已更新' if containerd_config.changed else '无变化') if containerd_config is defined else '❓ 主配置: 状态未知' }}"
+    - "{{ '✅ 服务单元: ' + ('已更新' if containerd_service.changed else '无变化') if containerd_service is defined else '❓ 服务单元: 状态未知' }}"
+    - ""
+    - "网络配置："
+    - "📁 CNI 目录: {{ base_dir | default('/opt/kube') }}/cni/bin"
+    - "📁 CNI 配置: /etc/cni/net.d"
+    - ""
+    - "==========================================================="
+    - "部署完成！验证命令：crictl info | nerdctl info"
+    - "==========================================================="
+  tags:
+  - summary

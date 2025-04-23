@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint: 192.168.1.131:6443
+  creationTimestamp: null
+  labels:
+    component: kube-apiserver
+    tier: control-plane
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --bind-address={{ bind_all_address }}
+    - --advertise-address={{ inventory_hostname }}
+    - --secure-port={{ kube_apiserver_lb_port }}
+    - --allow-privileged=true
+    - --api-audiences={{ apiserver_api_audiences }}
+    - --authorization-mode={{ apiserver_authorization_mode }}
+    - --enable-admission-plugins={{ apiserver_enable_admission_plugins }}
+{% if use_external_etcd %}
+    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.pem
+    - --etcd-certfile=/etc/kubernetes/pki/etcd/apiserver-etcd-client.pem
+    - --etcd-keyfile=/etc/kubernetes/pki/etcd/apiserver-etcd-client-key.pem
+    - --etcd-servers={{ external_etcd_endpoints }}
+{% else %}
+    - --etcd-cafile=/etc/kubernetes/pki/ca.pem
+    - --etcd-certfile=/etc/kubernetes/pki/kube-apiserver.pem
+    - --etcd-keyfile=/etc/kubernetes/pki/kube-apiserver-key.pem
+    - --etcd-servers={{ inner_etcd_endpoints }}
+{% endif %}
+    - --enable-bootstrap-token-auth=true
+    - --endpoint-reconciler-type=lease
+    - --client-ca-file=/etc/kubernetes/pki/ca.pem
+    - --kubelet-certificate-authority=/etc/kubernetes/pki/ca.pem
+    - --kubelet-client-certificate=/etc/kubernetes/pki/kube-apiserver.pem
+    - --kubelet-client-key=/etc/kubernetes/pki/kube-apiserver-key.pem
+    - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+    - --requestheader-allowed-names=
+    - --requestheader-client-ca-file=/etc/kubernetes/pki/ca.pem
+    - --requestheader-extra-headers-prefix=X-Remote-Extra-
+    - --requestheader-group-headers=X-Remote-Group
+    - --requestheader-username-headers=X-Remote-User
+    - --service-account-issuer=https://kubernetes.default.svc.{{ cluster_dns_domain }}
+    - --service-account-signing-key-file=/etc/kubernetes/pki/ca-key.pem
+    - --service-account-key-file=/etc/kubernetes/pki/ca.pem
+    - --service-cluster-ip-range={{ service_cidr }}
+    - --service-node-port-range={{ service_nodeport_range }}
+    - --tls-cert-file=/etc/kubernetes/pki/kube-apiserver.pem
+    - --tls-private-key-file=/etc/kubernetes/pki/kube-apiserver-key.pem
+    - --enable-aggregator-routing=true
+    - --proxy-client-cert-file=/etc/kubernetes/pki/aggregator-proxy.pem
+    - --proxy-client-key-file=/etc/kubernetes/pki/aggregator-proxy-key.pem
+    - --v=2
+    image: {{ registry }}/{{ registry_project }}/kube-apiserver:{{ kubernetes_version }}
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: {{ inventory_hostname }}
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    name: kube-apiserver
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        host: {{ inventory_hostname }}
+        path: /readyz
+        port: 6443
+        scheme: HTTPS
+      periodSeconds: 1
+      timeoutSeconds: 15
+    resources:
+      requests:
+        cpu: 250m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: {{ inventory_hostname }}
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /etc/ssl/certs
+      name: ca-certs
+      readOnly: true
+    - mountPath: /etc/ca-certificates
+      name: etc-ca-certificates
+      readOnly: true
+    - mountPath: /etc/kubernetes/pki
+      name: k8s-certs
+      readOnly: true
+    - mountPath: /usr/local/share/ca-certificates
+      name: usr-local-share-ca-certificates
+      readOnly: true
+    - mountPath: /usr/share/ca-certificates
+      name: usr-share-ca-certificates
+      readOnly: true
+  hostNetwork: true
+  priority: 2000001000
+  priorityClassName: system-node-critical
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+  - hostPath:
+      path: /etc/ssl/certs
+      type: DirectoryOrCreate
+    name: ca-certs
+  - hostPath:
+      path: /etc/ca-certificates
+      type: DirectoryOrCreate
+    name: etc-ca-certificates
+  - hostPath:
+      path: {{ ca_dir }}
+      type: DirectoryOrCreate
+    name: k8s-certs
+  - hostPath:
+      path: /usr/local/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-local-share-ca-certificates
+  - hostPath:
+      path: /usr/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-share-ca-certificates
+status: {}

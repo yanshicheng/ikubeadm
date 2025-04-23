@@ -1,0 +1,23 @@
+- name: 检查部署类型
+  ansible.builtin.assert:
+    that: etcd_deploy_mode in ['manifest', 'systemd']
+    fail_msg: "etcd 部署类型只能是 ['manifest', 'systemd']"
+    success_msg: "etcd 部署类型: {{ etcd_deploy_mode }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: 部署 etcd 集群 manifest 模式
+  ansible.builtin.import_tasks: etcd-manifest.yml
+  when:
+  - etcd_deploy_mode == "manifest"
+  - use_external_etcd == false
+  - groups['etcd'] | length > 0
+
+- name: 使用外部 etcd 集群提示
+  ansible.builtin.debug:
+    msg: "使用外部 etcd 集群，跳过 etcd 部署"
+  when:
+  - use_external_etcd

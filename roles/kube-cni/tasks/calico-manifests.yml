@@ -1,0 +1,119 @@
+---
+- name: 确保 calico 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/calico"
+    state: directory
+    mode: '0755'
+
+- name: 分发 calicoctl 二进制文件
+  copy:
+    src: "{{ calico_package_dir }}/calicoctl"
+    dest: "{{ base_dir }}/bin/calicoctl"
+    mode: '0755'
+
+- name: 复制 Calico 模板到 master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ kube_base_dir }}/addon/calico/{{ item.dest }}"
+    mode: '0644'
+  loop:
+  - { src: "{{ calico_template_manifests_dir }}/calico-namespace.yaml.j2", dest: "calico-namespace.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-crds.yaml.j2", dest: "calico-crds.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-config.yaml.j2", dest: "calico-config.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-rbac.yaml.j2", dest: "calico-rbac.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-kube-controllers.yaml.j2", dest: "calico-kube-controllers.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-typha.yaml.j2", dest: "calico-typha.yaml" }
+  - { src: "{{ calico_template_manifests_dir }}/calico-node.yaml.j2", dest: "calico-node.yaml" }
+
+- name: 部署 Calico 组件
+  shell: |
+    cd {{ kube_base_dir }}/addon/calico/
+    {{ base_dir }}/bin/kubectl apply -f calico-namespace.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-crds.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-rbac.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-config.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-typha.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-kube-controllers.yaml
+    {{ base_dir }}/bin/kubectl apply -f calico-node.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: BGP Route Reflector 配置
+  block:
+  # 检查 calico_rr_group 
+  - name: 检查是否自定义 calico_rr_group 主机组
+    set_fact:
+      calico_rr_exists: "{{ groups['calico_rr_group'] is defined and groups['calico_rr_group']|length > 0 }}"
+
+  - name: 节点配置 Route Reflector
+    shell: |
+      {{ base_dir }}/bin/kubectl annotate node {{ hostvars[item]['ansible_nodename'] }} projectcalico.org/RouteReflectorClusterID=244.0.0.1 --overwrite
+      {{ base_dir }}/bin/kubectl label node {{ hostvars[item]['ansible_nodename'] }} route-reflector='true' --overwrite
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    with_items: "{{ groups['calico_rr_group'] }}"
+    when: calico_rr_exists|bool
+
+  - name: 设置 master 节点为 Route Reflector
+    shell: |
+      {{ base_dir }}/bin/kubectl annotate node {{ hostvars[item]['ansible_nodename'] }} projectcalico.org/RouteReflectorClusterID=244.0.0.1 --overwrite
+      {{ base_dir }}/bin/kubectl label node {{ hostvars[item]['ansible_nodename'] }} route-reflector='true' --overwrite
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    with_items: "{{ groups['ikube_master'] }}"
+    when: not calico_rr_exists|bool
+
+  - name: 分发 BGP 配置文件
+    template:
+      src: "{{ item.src }}"
+      dest: "{{ kube_base_dir }}/addon/calico/{{ item.dest }}"
+      mode: '0644'
+    loop:
+    - { src: "{{ calico_template_manifests_dir }}/calico-bgp-config.yaml.j2", dest: "calico-bgp-config.yaml" }
+    - { src: "{{ calico_template_manifests_dir }}/calico-bgp-peer.yaml.j2", dest: "calico-bgp-peer.yaml" }
+
+  - name: 应用 Calico BGP 配置
+    shell: |
+      cd {{ kube_base_dir }}/addon/calico/
+      {{ base_dir }}/bin/kubectl apply -f calico-bgp-config.yaml
+      {{ base_dir }}/bin/kubectl apply -f calico-bgp-peer.yaml
+    delegate_to: "{{ groups['ikube_master'][0] }}"
+    run_once: true
+  when:
+  - "calico_mode == 'bgp'"
+  - calico_bgp_rr
+
+- name: 轮训等待所有 Calico Pod 进入运行状态
+  shell: >
+    PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ cluster_cni_namespace }} -l k8s-app=calico-node --no-headers | wc -l) && test "$PODCOUNT" -gt 0 && test $({{ base_dir }}/bin/kubectl get pods -n {{ cluster_cni_namespace }} -l k8s-app=calico-node -o jsonpath='{range .items[*]}{.status.phase}{","}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "Running,true" | wc -l) -eq 0
+  register: calico_pods_not_running
+  retries: 30
+  delay: 10
+  until: calico_pods_not_running.rc == 0
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: VxLAN 模式修改默认端口号解决虚拟化环境冲突
+  shell: >
+    {{ base_dir }}/bin/kubectl patch felixconfigurations default --type=merge -p '{"spec":{"vxlanPort":4799}}'
+  when:
+  - calico_mode == "vxlan"
+
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 检查 Calico 节点状态
+  shell: "{{ base_dir }}/bin/calicoctl node status"
+  register: calico_node_status
+  retries: 15
+  delay: 10
+  until: calico_node_status.rc == 0 and calico_node_status.stdout.find('Established') != -1
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 输出 Calico 节点状态
+  debug:
+    var: "calico_node_status.stdout_lines"
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  register: calico_node_status
+  changed_when: false
+  when: calico_node_status is defined and calico_node_status.stdout is defined

@@ -1,0 +1,7 @@
+# 启用 kubelet 服务
+- name: 重启 kubelet 服务
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: restarted
+    daemon_reload: yes

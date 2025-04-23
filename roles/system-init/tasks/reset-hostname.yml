@@ -1,0 +1,62 @@
+---
+- name: 重置主机名
+  block:
+  - name: 设置要验证的主机名变量
+    set_fact:
+      node_name_to_check: "{{ hostname if hostname is defined else ansible_nodename }}"
+      using_hostname_var: "{{ hostname is defined }}"
+
+  - name: 验证主机名是否符合 Kubernetes nodename 规范
+    assert:
+      that:
+      - node_name_to_check is regex('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
+      - node_name_to_check | length <= 253
+      fail_msg: >
+        错误：{% if using_hostname_var %}hostname 变量 '{{ node_name_to_check }}'{% else %}主机名 '{{ node_name_to_check }}'{% endif %} 不符合 Kubernetes nodename 规范。 Kubernetes 要求节点名称必须： - 只包含小写字母、数字、'-' 或 '.' - 以字母或数字开头和结尾 - 只能使用点号作为分隔符 - 长度不超过 253 个字符
+
+        请修改您的{% if using_hostname_var %} hostname 变量{% else %}主机名{% endif %}后再继续执行。
+      success_msg: "{% if using_hostname_var %}hostname 变量 '{{ node_name_to_check }}'{% else %}主机名 '{{ node_name_to_check }}'{% endif %} 符合 Kubernetes nodename 规范。"
+    any_errors_fatal: true
+
+  - name: 获取当前主机名
+    command: hostname
+    register: current_hostname
+    changed_when: false
+    check_mode: false
+
+  - name: 设置主机名
+    hostname:
+      name: "{{ hostname }}"
+    when:
+    - hostname is defined
+    - current_hostname.stdout != hostname
+    register: hostname_changed
+
+  - name: 更新 /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      regexp: "^127.0.0.1\\s+{{ current_hostname.stdout }}(\\s+.*)?$"
+      line: "127.0.0.1 {{ hostname }} {{ current_hostname.stdout }}"
+      state: present
+    when: hostname_changed is changed
+
+  - name: 显示主机名更改信息
+    debug:
+      msg: "主机名已从 '{{ current_hostname.stdout }}' 更改为 '{{ hostname }}'"
+    when: hostname_changed is changed
+
+  when:
+  - hostname is defined
+
+# 然后强制刷新事实
+- name: 强制刷新主机信息
+  meta: refresh_inventory
+
+# 或者完全清除并重新收集
+- name: 清除并重新收集主机信息
+  meta: clear_facts
+
+# 修改主机名后重新收集事实
+- name: 重新收集主机信息
+  setup:
+  become: true

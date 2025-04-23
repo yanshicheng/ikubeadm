@@ -1,0 +1,62 @@
+---
+- name: 确保 modules-load.d 目录存在
+  file:
+    path: /etc/modules-load.d
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes
+
+- name: 尝试加载 nf_conntrack_ipv4
+  shell: 'modprobe nf_conntrack_ipv4 || echo "NoFound"'
+  register: nf_conntrack_ipv4
+
+- name: 尝试加载 xt_mark
+  shell: 'modprobe xt_mark || echo "NoFound"'
+  register: xt_mark
+
+- name: 分发 ipvs 模块配置文件
+  template:
+    src: templates/99-ikubeops-ipvs.conf.j2
+    dest: /etc/modules-load.d/99-ikubeops-ipvs.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  register: "restart_systemd_modules_load"
+  notify: "重新加载内核模块"
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes
+
+- name: 重启 systemd 模块加载服务
+  service:
+    name: systemd-modules-load
+    state: restarted
+    enabled: true
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes
+
+- name: 检查 IPVS 模块是否已加载
+  shell: "lsmod | grep -E 'ip_vs|ip_vs_rr|ip_vs_wrr|ip_vs_sh'"
+  register: systemd_modules_load
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes
+
+- name: 显示 IPVS 模块加载状态
+  debug:
+    msg: "IPVS模块已成功加载"
+  when: systemd_modules_load.rc == 0
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes

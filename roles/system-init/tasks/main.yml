@@ -1,0 +1,122 @@
+---
+- name: 包含操作系统特定的变量
+  include_vars: "{{ ansible_os_family }}.yml"
+
+- name: 配置主机名
+  import_tasks: reset-hostname.yml
+  when:
+  - enable_reset_hostname
+  tags:
+  - hostname
+
+- name: 临时同步时间保持和主控节点一致
+  import_tasks: sync-time.yml
+  tags:
+  - time
+
+# 软件包安装和配置
+- name: 安装所需软件包
+  import_tasks: packages.yml
+  when:
+  - enable_install_packages
+  tags:
+  - packages
+
+# 基本系统配置
+- name: 配置时间和日期设置
+  import_tasks: timedatectl.yml
+  when:
+  - enable_timezone
+  tags:
+  - time
+
+- name: 配置静态解析
+  import_tasks: static-hosts.yml
+  tags:
+  - hosts
+
+- name: 配置 IPVS
+  import_tasks: ipvs.yml
+  when:
+  - "'ikube_cluster' in group_names"
+  - enable_ipvs
+  tags:
+  - ipvs
+
+# 日志优化配置
+- name: 优化日志收集设置
+  import_tasks: journal.yml
+  when:
+  - enable_log_optimization
+  tags:
+  - logging
+
+# 安全设置
+- name: 配置 SELinux
+  import_tasks: selinux.yml
+  when:
+  - disable_selinux
+  tags:
+  - selinux
+
+- name: 配置防火墙
+  import_tasks: firewalld.yml
+  when:
+  - disable_firewall
+  tags:
+  - firewall
+
+# 系统性能优化
+- name: 配置交换分区
+  import_tasks: swap.yml
+  when: "'ikube_cluster' in group_names"
+  tags:
+  - swap
+
+- name: 配置系统参数
+  import_tasks: sysctl.yml
+  when:
+  - enable_kernel_optimization
+  tags:
+  - sysctl
+
+- name: 配置资源限制
+  import_tasks: limits.yml
+  when:
+  - enable_system_limit_optimization
+  tags:
+  - limits
+
+- name: 配置 NFS 客户端
+  import_tasks: nfs-client.yml
+  when:
+  - enable_nfs_client
+  tags:
+  - nfs
+
+# 用户体验改进
+- name: 配置命令历史记录
+  import_tasks: history.yml
+  when:
+  - enable_history_optimization
+  tags:
+  - history
+
+- name: 配置 vim 设置
+  import_tasks: vimrc.yml
+  when:
+  - enable_vim_optimization
+  tags:
+  - vim
+
+- name: 配置 auditd
+  import_tasks: auditd.yml
+  when:
+  - enable_audit
+  tags:
+  - auditd
+
+- name: 配置  NetworkManager
+  import_tasks: network-manager.yml
+  tags:
+  - network-manager

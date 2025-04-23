@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubeadm.kubernetes.io/etcd.advertise-client-urls: https://{{ inventory_hostname }}:2379
+  creationTimestamp: null
+  labels:
+    component: etcd
+    tier: control-plane
+  name: etcd
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - etcd
+    - --name={{ ansible_nodename }}
+    - --data-dir=/var/lib/etcd
+    - --snapshot-count=50000
+    - --auto-compaction-retention=1
+    - --auto-compaction-mode=periodic
+    - --max-request-bytes=10485760 
+    - --quota-backend-bytes=8589934592
+    - --experimental-initial-corrupt-check=true
+    - --experimental-watch-progress-notify-interval=5s
+    - --initial-advertise-peer-urls=https://{{ inventory_hostname }}:2380
+    - --listen-peer-urls=https://{{ ansible_host }}:2380
+    - --listen-client-urls=https://127.0.0.1:2379,https://{{ inventory_hostname }}:2379
+    - --advertise-client-urls=https://{{ inventory_hostname }}:2379
+    - --initial-cluster-token=etcd-cluster-0
+    - --initial-cluster={{ etcd_initial_cluster }}
+    - --initial-cluster-state=new
+    - --listen-metrics-urls=http://127.0.0.1:2381
+    - --client-cert-auth=true
+    - --cert-file=/etc/kubernetes/pki/etcd.pem
+    - --key-file=/etc/kubernetes/pki/etcd-key.pem
+    - --peer-client-cert-auth=true
+    - --peer-cert-file=/etc/kubernetes/pki/etcd.pem
+    - --peer-key-file=/etc/kubernetes/pki/etcd-key.pem
+    - --peer-trusted-ca-file=/etc/kubernetes/pki/ca.pem
+    - --trusted-ca-file=/etc/kubernetes/pki/ca.pem
+    image: {{ etcd_image }}
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 127.0.0.1
+        path: /livez
+        port: 2381
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    name: etcd
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        host: 127.0.0.1
+        path: /readyz
+        port: 2381
+        scheme: HTTP
+      periodSeconds: 1
+      timeoutSeconds: 15
+    resources:
+      requests:
+        cpu: 100m
+        memory: 100Mi
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 127.0.0.1
+        path: /readyz
+        port: 2381
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 15
+    volumeMounts:
+    - mountPath: /var/lib/etcd
+      name: etcd-data
+    - mountPath: /etc/kubernetes/pki
+      name: etcd-certs
+  hostNetwork: true
+  priority: 2000001000
+  priorityClassName: system-node-critical
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+  - hostPath:
+      path: {{ ca_dir }}
+      type: DirectoryOrCreate
+    name: etcd-certs
+  - hostPath:
+      path: {{ etcd_data_dir }}
+      type: DirectoryOrCreate
+    name: etcd-data
+status: {}

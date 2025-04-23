@@ -1,0 +1,50 @@
+---
+# 共用任务 - 检查 SELinux 配置存在与否
+- name: 检查 SELinux 是否已安装
+  stat:
+    path: /etc/selinux/config
+  register: selinux_conf
+
+# 处理 SELinux
+- name: SELinux 处理
+  block:
+  - name: 立即临时关闭 SELinux
+    command: setenforce 0
+    changed_when: false
+    failed_when: false
+    when: ansible_os_family in centos_family
+  # 永久关闭 SELinux
+  - name: 永久关闭 SELinux
+    lineinfile:
+      path: /etc/selinux/config
+      regexp: '^SELINUX='
+      line: 'SELINUX=disabled'
+      state: present
+    register: selinux_disabled
+
+  - name: SELinux 状态信息
+    debug:
+      msg: "SELinux 已关闭"
+    when: selinux_disabled.changed
+  when: selinux_conf.stat.exists
+
+# 检查并关闭 AppArmor 的 Ansible 任务
+# - name: 检查 AppArmor 服务是否存在
+#   command: systemctl status apparmor
+#   register: apparmor_status
+#   changed_when: false # 检查操作不应标记为变更
+#   failed_when: false # 允许命令失败（服务不存在的情况）
+#   check_mode: no # 即使在检查模式下也执行此命令
+
+# - name: 停止并禁用 AppArmor 服务 (如果存在)
+#   systemd:
+#     name: apparmor
+#     state: stopped
+#     enabled: no
+#   when: apparmor_status.rc == 0 # 只有当服务存在时才执行（返回码为0）
+#   register: apparmor_disable
+
+# - name: 显示 AppArmor 状态信息
+#   debug:
+#     msg: "AppArmor 服务已停止并禁用"
+#   when: apparmor_disable is changed

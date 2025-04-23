@@ -1,0 +1,109 @@
+# 为每个节点创建 kubelet 证书和配置文件
+- name: 创建 kubelet 目录结构
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+  - "{{ local_pki_dir }}/kubelet"
+  - "{{ local_kubeconfig_dir }}/kubelet"
+
+- name: 收集和映射节点主机名
+  block:
+  - name: 收集远程主机的主机名
+    command: hostname
+    delegate_to: "{{ item }}"
+    register: hostname_results
+    loop: "{{ groups['ikube_cluster'] }}"
+
+  - name: 创建主机名映射
+    set_fact:
+      hostname_map: "{{ hostname_map | default({}) | combine({item.item: item.stdout}) }}"
+    loop: "{{ hostname_results.results }}"
+
+- name: 准备和创建 kubelet 证书
+  block:
+  - name: 准备 kubelet 证书签名请求模板
+    template:
+      src: kubelet-csr.json.j2
+      dest: "{{ local_pki_dir }}/kubelet/{{ hostname_map[host_item] }}-csr.json"
+    loop: "{{ groups['ikube_cluster'] }}"
+    loop_control:
+      loop_var: host_item
+    register: kubelet_csr_templates
+    vars:
+      node_name: "{{ hostname_map[host_item] }}"
+      node_ip: "{{ host_item }}"
+
+  - name: 检查 kubelet 证书是否存在
+    stat:
+      path: "{{ local_pki_dir }}/kubelet/{{ hostname_map[host_item] }}.pem"
+    loop: "{{ groups['ikube_cluster'] }}"
+    loop_control:
+      loop_var: host_item
+      index_var: host_idx
+    register: kubelet_cert_exists
+
+  - name: 创建 kubelet 证书和私钥
+    shell: |
+      cd {{ local_pki_dir }}/kubelet && \
+      {{ cfssl_dir }}/cfssl gencert \
+      -ca=../ca.pem \
+      -ca-key=../ca-key.pem \
+      -config=../ca-config.json \
+      -profile=kubernetes \
+      {{ hostname_map[host_item] }}-csr.json | {{ cfssl_dir }}/cfssljson -bare {{ hostname_map[host_item] }}
+    loop: "{{ groups['ikube_cluster'] }}"
+    loop_control:
+      loop_var: host_item
+      index_var: host_idx
+    register: kubelet_cert_results
+    when: >
+      not kubelet_cert_exists.results[host_idx].stat.exists or kubelet_csr_templates.results[host_idx].changed or _update_components|bool
+    changed_when: kubelet_cert_results.rc == 0
+    failed_when: kubelet_cert_results.rc != 0 and "already exists" not in kubelet_cert_results.stderr
+    vars:
+      node_name: "{{ hostname_map[host_item] }}"
+
+- name: 检查 kubelet kubeconfig 是否存在
+  stat:
+    path: "{{ generate_certs_dir }}/kubeconfig/kubelet/{{ hostname_map[host_item] }}.kubeconfig"
+  loop: "{{ groups['ikube_cluster'] }}"
+  loop_control:
+    loop_var: host_item
+    index_var: host_idx
+  register: kubelet_kubeconfig_exists
+
+- name: 配置 kubelet kubeconfig 文件
+  shell: |
+    # 设置集群参数
+    {{ kubectl_dir }}/kubectl config set-cluster {{ cluster_name }} \
+    --certificate-authority={{ local_pki_dir }}/ca.pem \
+    --embed-certs=true \
+    --server={{ kube_apiserver }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kubelet/{{ hostname_map[host_item] }}.kubeconfig && \
+
+    # 设置认证参数
+    {{ kubectl_dir }}/kubectl config set-credentials system:node:{{ hostname_map[host_item] }} \
+    --client-certificate={{ local_pki_dir }}/kubelet/{{ hostname_map[host_item] }}.pem \
+    --client-key={{ local_pki_dir }}/kubelet/{{ hostname_map[host_item] }}-key.pem \
+    --embed-certs=true \
+    --kubeconfig={{ local_kubeconfig_dir }}/kubelet/{{ hostname_map[host_item] }}.kubeconfig && \
+
+    # 设置上下文参数
+    {{ kubectl_dir }}/kubectl config set-context {{ context_name }} \
+    --cluster={{ cluster_name }} \
+    --user=system:node:{{ hostname_map[host_item] }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kubelet/{{ hostname_map[host_item] }}.kubeconfig && \
+
+    # 选择默认上下文
+    {{ kubectl_dir }}/kubectl config use-context {{ context_name }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kubelet/{{ hostname_map[host_item] }}.kubeconfig
+  loop: "{{ groups['ikube_cluster'] }}"
+  loop_control:
+    loop_var: host_item
+    index_var: host_idx
+  when: >
+    not kubelet_kubeconfig_exists.results[host_idx].stat.exists or  _update_components|bool or  _update_ca|bool or  (kubelet_cert_results.results[host_idx].changed|default(false) if kubelet_cert_results is defined else false)
+  vars:
+    node_name: "{{ hostname_map[host_item] }}"

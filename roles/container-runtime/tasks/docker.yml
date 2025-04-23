@@ -1,0 +1,289 @@
+---
+# ==========================================================================
+# Docker安装任务文件
+# 包含Docker和cri-docker的安装、配置和服务管理
+# ==========================================================================
+
+- name: 创建必要的目录
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+  - "{{ base_dir }}/cni/bin"
+  - "{{ base_dir }}/cni/cache"
+  - "{{ base_dir }}/bin"
+  - /usr/local/bin
+  - /etc/docker
+  - /etc/docker/certs.d
+  - /etc/containerd/
+  - /run/containerd/
+  - /var/run/cri-dockerd
+  tags:
+  - install
+
+- name: 生成仓库列表
+  ansible.builtin.set_fact:
+    registry_list: >-
+      {{ container_insecure_registries | default([]) | map(attribute='hosts')  | unique }}
+    cert_required_registries: >-
+      {{ container_insecure_registries | default([]) | selectattr('cert_auth', 'defined') | selectattr('cert_auth') | map(attribute='hosts') | list }}
+  delegate_to: localhost
+  run_once: true
+
+# 检查证书文件是否存在
+- name: 检查仓库证书文件
+  ansible.builtin.stat:
+    path: "{{ registry_certs_dir }}/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}"
+  register: cert_check
+  loop: "{{ cert_required_registries }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: 缺少仓库 ca 证书
+  ansible.builtin.fail:
+    msg: |
+      以下仓库配置了 cert_auth=true 但找不到证书文件:
+      {% for result in cert_check.results %}
+        {% if not result.stat.exists %}
+          - {{ result.item }}
+          请在 {{ registry_certs_dir }}/{{ result.item | regex_replace('https?://(.+)(:.*)?', '\1') }}  目录放置ca.crt文件
+           或者将此仓库的 cert_auth 设置为 false
+        {% endif %}
+      {% endfor %}
+  when: cert_check.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: 创建仓库证书目录
+  ansible.builtin.file:
+    path: "/etc/docker/certs.d/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ registry_list }}"
+
+- name: 分发仓库 ca 证书
+  ansible.builtin.copy:
+    src: "{{ registry_certs_dir }}/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}/ca.crt"
+    dest: "/etc/docker/certs.d/{{ item | regex_replace('https?://(.+)(:.*)?', '\\1') }}/ca.crt"
+    mode: '0644'
+  loop: "{{ cert_required_registries }}"
+  when: cert_required_registries | length > 0
+
+# 添加环境变量配置
+- name: 添加二进制目录到系统环境变量
+  lineinfile:
+    path: /etc/profile.d/999-ikubesop-k8s.sh
+    regexp: '^export PATH={{ base_dir  }}/bin:\$PATH'
+    line: 'export PATH={{ base_dir }}/bin:$PATH'
+    create: yes
+    mode: 644
+  tags: kubernetes_env
+
+- name: 分发 docker 工具
+  ansible.builtin.unarchive:
+    src: "{{ docker_package }}"
+    dest: "{{ base_dir }}"
+    mode: '0755'
+  register: docker_install
+  tags:
+  - install
+
+- name: 移动 docker 文件到 bin 目录
+  ansible.builtin.shell: "rsync -a --ignore-errors {{ base_dir }}/docker/* {{ base_dir }}/bin/ && rm -rf {{ base_dir }}/docker"
+  register: docker_install
+  tags:
+  - install
+
+- name: 生成 docker systemd 服务文件
+  ansible.builtin.template:
+    src: "docker/docker.service.j2"
+    dest: /etc/systemd/system/docker.service
+    mode: '0644'
+  register: docker_service
+  notify: reload_systemd
+  tags:
+  - config
+
+# - name: 生成 docker socket 服务文件
+#   ansible.builtin.template:
+#     src: "docker/docker.socket.j2"
+#     dest: /etc/systemd/system/docker.socket
+#     mode: '0644'
+#   register: docker_service
+#   notify: reload_docker_socket
+#   tags:
+#   - config
+
+# - name: 生成 docker containerd 配置文件
+#   ansible.builtin.template:
+#     src: "docker/config.toml.j2"
+#     dest: /etc/containerd/config.toml
+#     mode: '0644'
+#   notify: reload_docker_containerd
+#   tags:
+#   - config
+
+# - name: 生成 containerd systemd 服务文件
+#   ansible.builtin.template:
+#     src: "docker/containerd.service.j2"
+#     dest: /etc/systemd/system/containerd.service
+#     mode: '0644'
+#   notify: reload_docker_containerd
+
+- name: 生成docker配置文件
+  ansible.builtin.template:
+    src: "docker/daemon.json.j2"
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+  register: docker_config
+  notify: start_and_enable_container_runtime
+  tags:
+  - config
+
+# CRI-Docker 安装和配置块
+- name: CRI-Docker 安装与配置
+  block:
+  - name: 分发 cri-docker 工具
+    ansible.builtin.unarchive:
+      src: "{{ cri_docker_package }}"
+      dest: "{{ base_dir }}"
+      mode: '0755'
+    register: cri_docker_install
+    tags:
+    - install
+
+  - name: 移动 cri-docker 文件到 bin 目录
+    ansible.builtin.shell: "rsync -a --ignore-errors {{ base_dir }}/cri-dockerd/* {{ base_dir }}/bin/ && rm -rf {{ base_dir }}/cri-dockerd"
+    register: docker_install
+    failed_when: false
+    tags:
+    - install
+
+  - name: 生成 cri-docker systemd 服务文件
+    ansible.builtin.template:
+      src: "docker/cri-docker.service.j2"
+      dest: /etc/systemd/system/cri-docker.service
+      mode: '0644'
+    register: cri_docker_service
+    notify: reload_systemd
+    tags:
+    - config
+
+  - name: 生成 cri-docker socket 文件
+    ansible.builtin.template:
+      src: "docker/cri-docker.socket.j2"
+      dest: /etc/systemd/system/cri-docker.socket
+      mode: '0644'
+    register: cri_docker_socket
+    notify:
+    - reload_systemd
+    - start_and_enable_cri_docker
+    - start_and_enable_cri_docker_socket
+    tags:
+    - config
+  when: install_cri_docker | default(true)
+  tags:
+  - cri-docker
+
+# - name: 启动 docker socket 服务
+#   ansible.builtin.systemd:
+#     name: "docker.socket"
+#     state: started
+#     enabled: yes
+#     daemon_reload: yes
+
+# - name: 启动 docker container 服务
+#   ansible.builtin.systemd:
+#     name: "containerd.service"
+#     state: started
+#     enabled: yes
+#     daemon_reload: yes
+
+- name: 启动 docker 服务
+  ansible.builtin.systemd:
+    name: "{{ container_runtime }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: 启动 cri-docker 服务
+  ansible.builtin.systemd:
+    name: cri-docker.service
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  when: install_cri_docker | default(true)
+
+- name: 启动 cri-docker.socket 服务
+  ansible.builtin.systemd:
+    name: cri-docker.socket
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  when: install_cri_docker | default(true)
+
+- name: 轮询等待 docker 服务运行
+  ansible.builtin.shell: "systemctl is-active docker.service"
+  register: docker_status
+  until: '"active" in docker_status.stdout'
+  retries: 8
+  delay: 2
+  changed_when: false
+  tags:
+  - service
+  - upgrade_docker
+
+- name: 轮询等待 cri-docker 服务运行
+  ansible.builtin.shell: "systemctl is-active cri-docker.service"
+  register: cri_docker_status
+  until: '"active" in cri_docker_status.stdout'
+  retries: 8
+  delay: 2
+  changed_when: false
+  when: install_cri_docker | default(true)
+  tags:
+  - service
+  - upgrade_docker
+
+- name: 轮询等待 cri-docker.socket 运行
+  ansible.builtin.shell: "systemctl is-active cri-docker.socket"
+  register: cri_docker_socket_status
+  until: '"active" in cri_docker_socket_status.stdout'
+  retries: 8
+  delay: 2
+  changed_when: false
+  when: install_cri_docker | default(true)
+  tags:
+  - service
+  - upgrade_docker
+
+- name: 等待 cri-docker 套接字文件就绪
+  ansible.builtin.wait_for:
+    path: /var/run/cri-dockerd/cri-dockerd.sock
+    state: present
+    timeout: 30
+  register: cri_sock_wait
+  when:
+  - install_cri_docker | default(true)
+  - '"active" in cri_docker_status.stdout'
+  - '"active" in cri_docker_socket_status.stdout'
+  tags:
+  - service
+
+# 显示安装摘要
+- name: 显示容器运行时安装和启动摘要
+  ansible.builtin.debug:
+    msg:
+    - "=============================================================="
+    - "                   容器运行时安装摘要                          "
+    - "=============================================================="
+    - "Docker 服务状态: {{ docker_status.stdout }}"
+    - "Docker 版本信息: {{ container_version }}"
+    - "--------------------------------------------------------------"
+    - "CRI Docker Socket状态: {{ cri_docker_socket_status.stdout if cri_docker_socket_status is defined else '未安装' }}"
+    - "CRI Docker 版本信息: {{ cri_docker_version }}"
+    - "CRI Docker Socket: {{ '已就绪' if cri_sock_wait is defined and not cri_sock_wait.failed else '未就绪或已跳过' }}"
+    - "=============================================================="
+  tags:
+  - summary

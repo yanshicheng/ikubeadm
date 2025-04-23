@@ -1,0 +1,54 @@
+---
+# 任务执行顺序优化 - 确保基础设施先准备好
+# 1. 前置检查工作
+- import_tasks: prepare-directories.yml
+  tags: prepare-directories
+
+# 1.5 设置更新模式变量
+- import_tasks: update-mode.yml
+  tags: [ update-certs ]
+
+# 2. 备份原有证书和配置（更新时自动执行）
+- import_tasks: backup-certs.yml
+  tags: [ backup-certs, update-certs ]
+  # 备份是更新操作的必要步骤
+  when: _any_update|bool
+
+# 3. 生成 CA 证书
+- import_tasks: generate-certs.yml
+  tags: [ generate-certs, update-certs ]
+
+# 4. 创建 kube-apiserver 证书
+- import_tasks: apiserver.yml
+  tags: [ apiserver, update-certs ]
+
+# 5. 创建管理员证书和配置文件
+- import_tasks: admin.yml
+  tags: [ create-kctl-cfg, update-certs ]
+
+# 5. 创建 aggregator 证书
+- import_tasks: aggregator.yml
+  tags: [ aggregator, update-certs ]
+
+# 6. 创建各组件的证书和配置文件
+- import_tasks: controller-manager.yml
+  tags: [ controller-manager, update-certs ]
+
+- import_tasks: scheduler.yml
+  tags: [ scheduler, update-certs ]
+
+- import_tasks: proxy.yml
+  tags: [ proxy, update-certs ]
+
+- import_tasks: kubelet.yml
+  tags: [ kubelet, update-certs ]
+
+# 7. 执行完毕打印提示信息
+- name: 证书及 kubeconfig 生成完成
+  debug:
+    msg:
+    - "kubeconfig 生成完成，请查看 {{ local_kubeconfig_dir }} 目录"
+    - "证书生成完成，请查看 {{ local_pki_dir }} 目录"
+    - "!!!请备份好 {{ generate_certs_dir }} 目录下的所有文件，以免丢失"
+    - "{% if _any_update|bool and backup_dir is defined %}原有证书已备份至 {{ backup_dir }}{% endif %}"
+    - "{% if _update_ca|bool %}CA 证书有效期为 100 年{% endif %}"

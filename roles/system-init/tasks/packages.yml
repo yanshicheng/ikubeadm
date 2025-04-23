@@ -1,0 +1,26 @@
+---
+# 软件包安装任务
+- name: 更新软件包缓存 (Debian系统)
+  apt:
+    update_cache: yes
+  when: ansible_distribution in ['Ubuntu', 'Debian']
+  tags: packages
+  register: update_result
+  failed_when: update_result is failed
+
+- block:
+  - name: 安装系统软件包 (RedHat系统)
+    yum:
+      name: "{{ system_packages }}"
+      state: present
+      disable_gpg_check: yes
+    when: ansible_distribution in centos_family
+    tags: packages
+
+  - name: 安装系统软件包 (Debian系统)
+    apt:
+      name: "{{ system_packages }}"
+      state: present
+    when: ansible_distribution in ['Ubuntu', 'Debian']
+    tags: packages
+  any_errors_fatal: true

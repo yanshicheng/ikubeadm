@@ -1,0 +1,26 @@
+{
+  "signing": {
+    "default": {
+      "expiry": "{{ cert_expiry }}"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": [
+            "signing",
+            "key encipherment",
+            "server auth",
+            "client auth"
+        ],
+        "expiry": "{{ cert_expiry }}"
+      },
+      "kcfg": {
+        "usages": [
+            "signing",
+            "key encipherment",
+            "client auth"
+        ],
+        "expiry": "{{ custom_expiry }}"
+      }
+    }
+  }
+}

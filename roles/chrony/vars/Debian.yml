@@ -1,0 +1,7 @@
+# Debian 系列系统的特定变量
+
+chrony_service_name: "chrony"
+chrony_config_file: "/etc/chrony/chrony.conf"
+chrony_user: "_chrony"
+chrony_group: "_chrony"
+chrony_sourcedir: "/etc/chrony/sources.d"

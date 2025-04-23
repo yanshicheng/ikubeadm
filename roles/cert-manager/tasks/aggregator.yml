@@ -1,0 +1,23 @@
+- name: 准备 aggregator 证书签名请求
+  template:
+    src: aggregator-proxy-csr.json.j2
+    dest: "{{ local_pki_dir }}/aggregator-proxy-csr.json"
+  register: csr_template_result
+
+- name: 检查aggregator证书是否存在
+  stat:
+    path: "{{ local_pki_dir }}/aggregator-proxy.pem"
+  register: aggregator_pem_stat
+
+- name: 创建 aggregator 证书
+  shell: |
+    cd {{ local_pki_dir }} && \
+    {{ cfssl_dir }}/cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=ca-config.json \
+    -profile=kubernetes \
+    aggregator-proxy-csr.json | {{ cfssl_dir }}/cfssljson -bare aggregator-proxy
+  register: cert_creation_result
+  failed_when: cert_creation_result.rc != 0 and "already exists" not in cert_creation_result.stderr
+  when: csr_template_result.changed or not aggregator_pem_stat.stat.exists or _update_components|bool

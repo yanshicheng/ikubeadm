@@ -1,0 +1,61 @@
+- name: 准备 kube-controller-manager 证书签名请求
+  template:
+    src: kube-controller-manager-csr.json.j2
+    dest: "{{ local_pki_dir }}/kube-controller-manager-csr.json"
+  register: csr_template_result
+
+- name: 检查 kube-controller-manager 证书是否存在
+  stat:
+    path: "{{ local_pki_dir }}/kube-controller-manager.pem"
+  register: controller_pem_stat
+
+- name: 创建 kube-controller-manager 证书
+  shell: |
+    cd {{ local_pki_dir }} && \
+    {{ cfssl_dir }}/cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=ca-config.json \
+    -profile=kubernetes \
+    kube-controller-manager-csr.json | {{ cfssl_dir }}/cfssljson -bare kube-controller-manager
+  register: cert_creation_result
+  failed_when: cert_creation_result.rc != 0 and "already exists" not in cert_creation_result.stderr
+  when: csr_template_result.changed or not controller_pem_stat.stat.exists or _update_components|bool
+
+- name: 检查 kube-controller-manager.kubeconfig 是否存在
+  stat:
+    path: "{{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig"
+  register: controller_kubeconfig_stat
+
+- name: 配置 controller-manager kubeconfig
+  block:
+  - name: 设置集群参数 - controller-manager
+    shell: |
+      {{ kubectl_dir }}/kubectl config set-cluster {{ cluster_name }} \
+      --certificate-authority={{ local_pki_dir }}/ca.pem \
+      --embed-certs=true \
+      --server={{ kube_apiserver }} \
+      --kubeconfig={{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig
+
+  - name: 设置认证参数 - controller-manager
+    shell: |
+      {{ kubectl_dir }}/kubectl config set-credentials system:kube-controller-manager \
+      --client-certificate={{ local_pki_dir }}/kube-controller-manager.pem \
+      --client-key={{ local_pki_dir }}/kube-controller-manager-key.pem \
+      --embed-certs=true \
+      --kubeconfig={{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig
+
+  - name: 设置上下文参数 - controller-manager
+    shell: |
+      {{ kubectl_dir }}/kubectl config set-context {{ context_name }} \
+      --cluster={{ cluster_name }} \
+      --user=system:kube-controller-manager \
+      --kubeconfig={{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig
+
+  - name: 选择默认上下文 - controller-manager
+    shell: |
+      {{ kubectl_dir }}/kubectl config use-context {{ context_name }} \
+      --kubeconfig={{ local_kubeconfig_dir }}/kube-controller-manager.kubeconfig
+
+  when: >
+    not controller_kubeconfig_stat.stat.exists or _update_components|bool or _update_ca|bool or cert_creation_result.changed|default(false)

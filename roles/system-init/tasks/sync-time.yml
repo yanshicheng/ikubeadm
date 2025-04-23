@@ -1,0 +1,18 @@
+---
+- name: 获取控制主机当前时间
+  shell: date "+%Y-%m-%d %H:%M:%S"
+  register: current_time
+  delegate_to: localhost
+  changed_when: false
+  become: false
+
+- name: 在目标主机上设置时间
+  shell: date -s "{{ current_time.stdout }}"
+
+- name: 显示设置后的时间
+  shell: date
+  register: result
+
+- name: 输出结果
+  debug:
+    msg: "目标主机时间已设置为: {{ result.stdout }}"

@@ -1,0 +1,47 @@
+---
+kube_base_dir: "/etc/kubernetes"
+base_dir: "/opt/kubernetes"
+container_runtime: "containerd"
+
+# kube-vip 默认配置变量
+# API 服务器配置 - 与 cert-generator 角色共享的变量
+kube_apiserver_lb_addr: "127.0.0.1"
+kube_apiserver_lb_port: "6443"
+
+# kube-vip 镜像配置
+registry: "registry.ikubeops.local:5000"
+registry_project: "ikubeops"
+kube_vip_version: "v0.8.9"
+kube_vip_image: "{{ registry }}/{{ registry_project }}/kube-vip:{{ kube_vip_version }}"
+
+# kube-vip 网络配置
+kube_vip_cidr: "32"
+kube_vip_subnet: "/32"
+
+# ARP 模式专用配置
+kube_vip_interface: "eth0" # ARP 模式使用的网络接口
+
+# BGP 模式专用配置
+kube_vip_bgp_interface: "lo" # BGP 模式使用的网络接口（通常是 lo）
+kube_vip_bgp_enable: false # 是否启用 BGP
+kube_vip_bgp_routerid: "" # BGP 路由器 ID（默认为空，将使用节点 IP）
+kube_vip_bgp_as: "64513" # 本地 AS 号
+kube_vip_bgp_peeraddress: "" # BGP 对等体地址（为空时使用 bgp_peers）
+kube_vip_bgp_peerpass: "" # BGP 对等体密码
+kube_vip_bgp_peeras: "64513" # BGP 对等体 AS 号
+kube_vip_bgp_peers: "" # BGP 对等体列表，格式：IP:AS号:密码:多跳，如 "10.160.0.160:64513::false"
+
+# kube-vip 部署配置
+kube_vip_manifest_path: "{{ kube_base_dir }}/manifests"
+kube_vip_deploy_mode: "arp" # 支持的模式：arp, bgp,
+kube_vip_kubeconfig_path: "{{ kube_base_dir }}/admin.kubeconfig" # 主节点上的 kubeconfig 路径
+
+# kube-vip 高级配置
+kube_vip_leader_election: true
+kube_vip_lease_duration: "5"
+kube_vip_renew_deadline: "3"
+kube_vip_retry_period: "1"
+kube_vip_enable_lb: true
+kube_vip_lb_fwdmethod: "local" # 支持的方法: local, tunnel, masquerade, directroute, bypass
+kube_vip_enable_prometheus: true
+kube_vip_prometheus: ":2112"

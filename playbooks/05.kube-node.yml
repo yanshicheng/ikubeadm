@@ -1,0 +1,5 @@
+- hosts:
+  - ikube_master
+  - ikube_node
+  roles:
+  - kube-node

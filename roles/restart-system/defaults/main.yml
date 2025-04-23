@@ -1,0 +1,6 @@
+# 等待重启的等待时间（秒）
+reboot_timeout: 300
+# 重启前等待的时间（秒）
+pre_reboot_delay: 5
+# 重启后等待的时间（秒）
+post_reboot_delay: 30

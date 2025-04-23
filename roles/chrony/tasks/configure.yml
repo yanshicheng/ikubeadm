@@ -1,0 +1,57 @@
+---
+# 配置 Chrony 的任务
+
+- name: 确保 Chrony 日志目录存在
+  file:
+    path: "{{ chrony_log_dir }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ chrony_user | default('root') }}"
+    group: "{{ chrony_group | default('root') }}"
+  tags:
+  - configure
+  - chrony
+  - server
+  - client
+
+- name: 备份原始配置文件
+  copy:
+    src: "{{ chrony_config_file }}"
+    dest: "{{ chrony_config_file }}.bak.{{ ansible_date_time.date }}"
+    remote_src: yes
+    force: no
+  when: ansible_check_mode == false
+  ignore_errors: true
+  tags:
+  - configure
+  - chrony
+  - server
+  - client
+
+- name: 配置 Chrony 服务器
+  template:
+    src: chrony.conf.j2
+    dest: "{{ chrony_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: 重启 Chrony 服务
+  when: inventory_hostname in groups['chrony'] and deploy_chrony_server | default(true) | bool
+  tags:
+  - configure
+  - chrony
+  - server
+
+- name: 配置 Chrony 客户端
+  template:
+    src: client.conf.j2
+    dest: "{{ chrony_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: 重启 Chrony 服务
+  when: inventory_hostname not in groups['chrony'] or not deploy_chrony_server | default(true) | bool
+  tags:
+  - configure
+  - chrony
+  - client

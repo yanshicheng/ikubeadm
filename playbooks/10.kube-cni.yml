@@ -1,0 +1,6 @@
+- hosts:
+  - ikube_master
+  - ikube_node
+  - calico_rr_group
+  roles:
+  - kube-cni

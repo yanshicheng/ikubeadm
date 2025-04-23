@@ -1,0 +1,58 @@
+- name: 准备 kube-proxy 证书签名请求
+  template:
+    src: kube-proxy-csr.json.j2
+    dest: "{{ local_pki_dir }}/kube-proxy-csr.json"
+  register: csr_template_result
+
+- name: 检查 kube-proxy 证书是否存在
+  stat:
+    path: "{{ local_pki_dir }}/kube-proxy.pem"
+  register: proxy_pem_stat
+
+- name: 创建 kube-proxy 证书
+  shell: |
+    cd {{ local_pki_dir }} && \
+    {{ cfssl_dir }}/cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=ca-config.json \
+    -profile=kubernetes \
+    kube-proxy-csr.json | {{ cfssl_dir }}/cfssljson -bare kube-proxy
+  register: cert_creation_result
+  changed_when: cert_creation_result.rc == 0
+  failed_when: cert_creation_result.rc != 0 and "already exists" not in cert_creation_result.stderr
+  when: >
+    csr_template_result.changed or not proxy_pem_stat.stat.exists or _update_components|bool
+
+- name: 检查 kube-proxy kubeconfig 是否存在
+  stat:
+    path: "{{ generate_certs_dir }}/kubeconfig/kube-proxy.kubeconfig"
+  register: proxy_kubeconfig_stat
+
+- name: 配置 kube-proxy kubeconfig
+  shell: |
+    # 设置集群参数
+    {{ kubectl_dir }}/kubectl config set-cluster {{ cluster_name }} \
+    --certificate-authority={{ local_pki_dir }}/ca.pem \
+    --embed-certs=true \
+    --server={{ kube_apiserver }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-proxy.kubeconfig && \
+
+    # 设置认证参数
+    {{ kubectl_dir }}/kubectl config set-credentials system:kube-proxy \
+    --client-certificate={{ local_pki_dir }}/kube-proxy.pem \
+    --client-key={{ local_pki_dir }}/kube-proxy-key.pem \
+    --embed-certs=true \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-proxy.kubeconfig && \
+
+    # 设置上下文参数
+    {{ kubectl_dir }}/kubectl config set-context {{ context_name }} \
+    --cluster={{ cluster_name }} \
+    --user=system:kube-proxy \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-proxy.kubeconfig && \
+
+    # 选择默认上下文
+    {{ kubectl_dir }}/kubectl config use-context {{ context_name }} \
+    --kubeconfig={{ local_kubeconfig_dir }}/kube-proxy.kubeconfig
+  when: >
+    not proxy_kubeconfig_stat.stat.exists or _update_components|bool or _update_ca|bool or cert_creation_result.changed

@@ -1,0 +1,36 @@
+- name: 检查是否是支持的 DNS 插件
+  ansible.builtin.assert:
+    that: cluster_dns in ['coredns']
+    fail_msg: "cluster_dns 部署类型只能是 ['calico']"
+    success_msg: "集群 DNS 插件为: {{ cluster_dns }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: 检查部署模式
+  ansible.builtin.assert:
+    that: addon_deploy_pattern in ['yaml', 'helm']
+    fail_msg: "addon_deploy_pattern 部署类型只能是 ['yaml', 'helm']"
+    success_msg: "集群插件部署模式为: {{ addon_deploy_pattern }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+
+- name: yaml 方式部署 DNS 组件
+  block:
+  - name: 部署 coredns 插件
+    import_tasks: coredns.yml
+    when:
+    - cluster_dns == "coredns"
+
+  - name: 部署 node-local-dns 插件
+    import_tasks: node-local-dns.yml
+    when:
+    - enable_local_dns_cache
+  when:
+  - addon_deploy_pattern == "yaml"
+  - "'ikube_master' in group_names"

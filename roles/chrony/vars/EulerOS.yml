@@ -1,0 +1,7 @@
+---
+# RedHat 系列系统的特定变量
+chrony_service_name: "chronyd"
+chrony_config_file: "/etc/chrony.conf"
+chrony_user: "chrony"
+chrony_group: "chrony"
+chrony_sourcedir: "/run/chrony-dhcp"

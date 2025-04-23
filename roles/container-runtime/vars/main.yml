@@ -1,0 +1,115 @@
+---
+# 架构映射
+arch_mapping:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm32
+  default: amd64
+
+# 当前架构
+current_arch: "{{ arch_mapping[ansible_architecture] | default(arch_mapping.default) }}"
+
+# 安装包位置
+package_dir: "{{ [playbook_dir | dirname, 'packages'] | path_join }}"
+
+# 日期和时间格式用于备份
+backup_date: "{{ '%Y%m%d_%H%M%S' | strftime }}"
+
+# containerd相关
+containerd_dir: "{{ package_dir }}/runtime/containerd"
+containerd_package: "{{ containerd_dir }}/containerd-{{ container_version }}-linux-{{ current_arch }}.tar.gz"
+
+# docker相关
+docker_dir: "{{ package_dir }}/runtime/docker"
+docker_package: "{{ docker_dir }}/{{ container_version }}/{{ current_arch }}/docker-{{ container_version }}.tgz"
+
+# runc
+runc_dir: "{{ package_dir }}/runtime/runc/{{ runc_version }}"
+runc: "{{ runc_dir }}/runc.{{ current_arch }}"
+
+# cni-plugins
+cni_plugins_dir: "{{ package_dir }}/runtime/cni-plugins"
+cni_plugins_package: "{{ cni_plugins_dir }}/cni-plugins-linux-{{ current_arch }}-{{ cni_plugins_version }}.tgz"
+
+# crictl
+crictl_dir: "{{ package_dir }}/runtime/crictl"
+crictl_package: "{{ crictl_dir }}/crictl-{{ crictl_version }}-linux-{{ current_arch }}.tar.gz"
+
+# nerdctl
+nerdctl_dir: "{{ package_dir }}/runtime/nerdctl"
+nerdctl_package: "{{ nerdctl_dir }}/nerdctl-{{ nerdctl_version }}-linux-{{ current_arch }}.tar.gz"
+
+# buildkit
+buildkit_dir: "{{ package_dir }}/runtime/buildkit"
+buildkit_package: "{{ buildkit_dir }}/buildkit-{{ buildkit_version }}.linux-{{ current_arch }}.tar.gz"
+
+# cri-docker
+cri_docker_dir: "{{ package_dir }}/runtime/cri-docker"
+cri_docker_package: "{{ cri_docker_dir }}/{{ cri_docker_version }}/{{ current_arch }}/cri-dockerd-{{ cri_docker_version[1:] if cri_docker_version.startswith('v') else cri_docker_version }}.{{ current_arch }}.tgz"
+
+generate_certs_dir: "{{ [playbook_dir | dirname, 'deploy', deploy_name] | path_join }}"
+registry_certs_dir: "{{ generate_certs_dir }}/registry"
+# 需检查的文件 - containerd安装模式
+containerd_required_files:
+- file: "{{ containerd_package }}"
+  name: "Containerd"
+- file: "{{ runc }}"
+  name: "Runc"
+- file: "{{ cni_plugins_package }}"
+  name: "CNI Plugins"
+- file: "{{ crictl_package }}"
+  name: "CRI Tools"
+
+# 需检查的可选文件 - containerd安装模式
+containerd_optional_files:
+- file: "{{ nerdctl_package }}"
+  name: "Nerdctl"
+  enabled: "{{ install_nerdctl }}"
+- file: "{{ buildkit_package }}"
+  name: "Buildkit"
+  enabled: "{{ install_buildkit }}"
+
+# 需检查的文件 - docker安装模式
+docker_required_files:
+- file: "{{ docker_package }}"
+  name: "Docker"
+- file: "{{ runc }}"
+  name: "Runc"
+- file: "{{ cni_plugins_package }}"
+  name: "CNI Plugins"
+- file: "{{ crictl_package }}"
+  name: "CRI Tools"
+
+# 需检查的可选文件 - docker安装模式
+docker_optional_files:
+- file: "{{ cri_docker_package }}"
+  name: "CRI Docker"
+  enabled: "{{ install_cri_docker }}"
+
+# 服务文件和配置的路径
+service_files:
+  docker:
+  - src: "docker/docker.service.j2"
+    dest: "/etc/systemd/system/docker.service"
+  cri_docker:
+  - src: "docker/cri-docker.service.j2"
+    dest: "/etc/systemd/system/cri-docker.service"
+  - src: "docker/cri-docker.socket.j2"
+    dest: "/etc/systemd/system/cri-docker.socket"
+  containerd:
+  - src: "containerd/containerd.service.j2"
+    dest: "/etc/systemd/system/containerd.service"
+
+# 配置文件路径
+config_files:
+  docker:
+  - src: "docker/daemon.json.j2"
+    dest: "/etc/docker/daemon.json"
+  containerd:
+  - src: "containerd/config.toml.j2"
+    dest: "/etc/containerd/config.toml"
+  - src: "containerd/crictl.yaml.j2"
+    dest: "/etc/crictl.yaml"
+  buildkit:
+  - src: "containerd/buildkitd.toml.j2"
+    dest: "/etc/buildkit/buildkitd.toml"

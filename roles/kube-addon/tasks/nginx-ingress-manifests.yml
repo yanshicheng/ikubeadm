@@ -1,0 +1,50 @@
+---
+- name: 确保 nginx-ingress 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/nginx-ingress"
+    state: directory
+    mode: '0755'
+  when: "'ikube_master' in group_names"
+
+- name: 复制 nginx-ingress 模板到 master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ kube_base_dir }}/addon/nginx-ingress/{{ item.dest }}"
+    mode: '0644'
+  loop:
+  - { src: "{{ nginx_ingress_template_manifests_dir }}/nginx-ingress.yaml.j2", dest: "nginx-ingress.yaml" }
+  when: "'ikube_master' in group_names"
+
+- name: 部署 nginx-ingress 插件
+  shell: |
+    cd {{ kube_base_dir }}/addon/nginx-ingress/
+    {{ base_dir }}/bin/kubectl apply -f nginx-ingress.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  register: apply_result
+  failed_when: apply_result.stderr is defined and apply_result.stderr != ""
+  run_once: true
+
+- name: 轮训等待所有 nginx-ingress pod 进入运行状态
+  shell: >
+    RUNNING_PODS=$({{ base_dir }}/bin/kubectl get pods -n {{ nginx_ingress_namespace }} -l app.kubernetes.io/name=ingress-nginx --field-selector status.phase=Running --no-headers | wc -l) &&  test "$RUNNING_PODS" -gt 0 &&  test $({{ base_dir }}/bin/kubectl get pods -n {{ nginx_ingress_namespace }} -l app.kubernetes.io/name=ingress-nginx --field-selector status.phase=Running -o jsonpath='{range .items[*]}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "true" | wc -l) -eq 0
+  register: ingress_pods_not_running
+  retries: 20
+  delay: 10
+  until: ingress_pods_not_running.rc == 0
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+
+- name: 查询 nginx-ingress pod 状态
+  shell: >
+    {{ base_dir }}/bin/kubectl get pods -n {{ nginx_ingress_namespace }} -l app.kubernetes.io/name=ingress-nginx
+  register: nginx_ingress_pods_status
+  run_once: true
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+
+- name: 输出 nginx-ingress pod 状态
+  debug:
+    var: nginx_ingress_pods_status.stdout_lines
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true

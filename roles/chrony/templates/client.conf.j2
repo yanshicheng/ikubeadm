@@ -1,0 +1,50 @@
+{{ ansible_managed | comment }}
+
+# 记录系统时钟增益/损失时间的速率
+driftfile {{ chrony_driftfile }}
+
+# 日志文件
+logdir {{ chrony_log_dir }}
+log {{ chrony_log_options }}
+
+# 上游NTP服务器 - 使用循环遍历所有chrony服务器
+{% set active_chrony_servers = [] %}
+{% for host in groups['chrony'] %}
+{% if hostvars[host].CHRONY_SERVER_DEPLOY is not defined or hostvars[host].CHRONY_SERVER_DEPLOY | bool %}
+{% set _ = active_chrony_servers.append(host) %}
+{% endif %}
+{% endfor %}
+
+{% if active_chrony_servers | length > 0 %}
+{% for server in active_chrony_servers %}
+server {{ server }} iburst
+{% endfor %}
+{% else %}
+# 没有找到活跃的 Chrony 服务器，使用默认上游服务器
+{% for server in chrony_ntp_servers %}
+server {{ server.server }} {{ server.options }}
+{% endfor %}
+{% endif %}
+
+# 允许系统时钟在前几次更新中步进
+# 如果其偏移量大于设定的阈值
+makestep {{ chrony_makestep_threshold }} {{ chrony_makestep_limit }}
+
+# 启用内核实时时钟(RTC)同步
+{% if chrony_rtcsync %}
+rtcsync
+{% endif %}
+
+# 防止错误估计影响系统时钟
+maxupdateskew {{ chrony_maxupdateskew }}
+
+# 忽略源层级权重
+{% if chrony_client_ignore_stratum | default(true) %}
+stratumweight 0
+{% endif %}
+
+# 从系统tz数据库获取TAI-UTC偏移和闰秒
+# 使用提供闰秒平滑时间的时间源时，必须注释掉此指令
+{% if chrony_leapsectz | default(true) %}
+leapsectz right/UTC
+{% endif %}

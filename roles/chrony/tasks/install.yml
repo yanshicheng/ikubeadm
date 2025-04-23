@@ -1,0 +1,14 @@
+---
+# 安装 Chrony 的任务
+- name: 卸载 ntp
+  package: name=ntp state=absent
+  ignore_errors: true
+
+- name: 安装 Chrony 软件包
+  package:
+    name: chrony
+    state: present
+  tags:
+  - install
+  - packages
+  - chrony

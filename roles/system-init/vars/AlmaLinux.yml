@@ -1,0 +1,45 @@
+---
+# RedHat 系列系统安装的软件包
+system_packages:
+- gcc # C语言编译器
+- gcc-c++ # C++语言编译器
+- vim # 文本编辑器
+- unzip # 解压缩工具
+- sysstat # 系统性能监控工具
+- wget # 网络下载工具
+- htop # 交互式进程查看器
+- tree # 以树形结构显示目录内容
+- openssl # SSL/TLS加密工具库
+- openssl-devel # OpenSSL开发库
+- tcpdump # 网络数据包分析工具
+- bash-completion # bash命令补全工具，需要重新登录服务器生效
+- traceroute # 网络路由跟踪工具
+- lrzsz # 文件上传下载工具
+- iftop # 网络带宽监控工具
+- iotop # 磁盘IO监控工具
+- curl # URL传输工具
+- chrony # 时间同步服务
+- bzip2 # 压缩工具
+- psmisc # 进程管理工具集，安装psmisc才能使用命令killall，keepalive的监测脚本需要
+- nfs-utils # NFS客户端和服务器，挂载nfs共享文件需要 (创建基于nfs的PV需要)
+- rpcbind # RPC端口映射服务
+- glibc-locale-source # 语言环境源码包
+- glibc-common # C库公共二进制文件和语言环境数据
+- audit # 系统审计工具
+- conntrack-tools # 网络连接跟踪工具，ipvs模式需要
+- ipset # IP集合管理工具，ipvs模式需要
+- ipvsadm # IPVS管理工具，ipvs模式需要
+- libseccomp # 安全计算模式库，安装containerd需要
+- rsync # 文件同步工具，分发证书等配置文件需要
+- socat # 多功能双向数据传输工具，用于port forwarding
+- ca-certificates
+- iptables
+- iproute
+- util-linux
+- ebtables
+- ethtool
+- iputils
+# 系统时间同步配置
+ntp_service: chronyd
+# CentOS特定内核参数
+centos_sysctl_params: # 没有特别的CentOS特定参数，如有需要可以添加

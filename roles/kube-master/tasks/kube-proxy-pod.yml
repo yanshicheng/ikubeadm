@@ -1,0 +1,37 @@
+---
+- name: 确保 kube-proxy 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/kube-proxy"
+    state: directory
+    mode: '0755'
+  when: "'ikube_master' in group_names"
+
+- name: 复制 kube-proxy 模板到 master
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ kube_base_dir }}/addon/kube-proxy/{{ item.dest }}"
+    mode: '0644'
+  loop:
+  - { src: "kube-proxy-configmap.yaml.j2", dest: "kube-proxy-configmap.yaml" }
+  - { src: "kube-proxy-daemonset.yaml.j2", dest: "kube-proxy-daemonset.yaml" }
+  - { src: "kube-proxy-sa.yaml.j2", dest: "kube-proxy-sa.yaml" }
+  when: "'ikube_master' in group_names"
+
+- name: 从 master 节点部署 kube-proxy
+  shell: |
+    cd {{ kube_base_dir }}/addon/kube-proxy
+    {{ base_dir }}/bin/kubectl apply -f kube-proxy-sa.yaml
+    {{ base_dir }}/bin/kubectl apply -f kube-proxy-configmap.yaml
+    {{ base_dir }}/bin/kubectl apply -f kube-proxy-daemonset.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  register: deploy_result
+
+- name: 等待 kube-proxy 组件就绪
+  shell: "desired=$({{ base_dir }}/bin/kubectl get daemonset -n kube-system kube-proxy -o jsonpath='{.status.desiredNumberScheduled}'); ready=$({{ base_dir }}/bin/kubectl get daemonset -n kube-system kube-proxy -o jsonpath='{.status.numberReady}'); if [ \"$desired\" = \"$ready\" ]; then echo \"\"; else echo \"未就绪：$ready/$desired\"; fi"
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  register: proxy_status
+  until: proxy_status.stdout == ""
+  retries: 15
+  delay: 10
+  run_once: true

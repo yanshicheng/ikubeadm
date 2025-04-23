@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mount-options
+  namespace: {{ nfs_namespace }}
+type: Opaque
+stringData:
+  mountOptions: "{{ nfs_storeage_mount_options }}"

@@ -1,0 +1,34 @@
+# 系统 hosts 文件 - 由 Ansible 管理
+# 最后更新: {{ ansible_date_time.date }}
+
+127.0.0.1   localhost localhost.localdomain
+127.0.0.1 {{ hostvars[inventory_hostname]['ansible_hostname'] }}
+{% if ansible_default_ipv6 is defined %}
+::1         localhost localhost.localdomain
+{% endif %}
+
+# 当前节点
+{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}    {{ hostvars[inventory_hostname]['ansible_hostname'] }}
+
+# 集群其他节点
+{% for entry in cluster_entries if entry.hostname != hostvars[inventory_hostname]['ansible_hostname'] and entry.ip %}
+{{ entry.ip }}    {{ entry.hostname }}
+{% endfor %}
+
+# Registry 服务
+{{ registry_ip }}    registry.ikubeops.local
+
+# 保留原有自定义条目
+# --- 原有自定义条目开始 ---
+{% if hosts_custom_entries is defined %}
+{{ hosts_custom_entries }}
+{% endif %}
+# --- 原有自定义条目结束 ---
+
+
+{% if custom_hosts is defined and custom_hosts %}
+# 外部传入的自定义主机映射
+{% for host in custom_hosts %}
+{{ host.ip }}    {{ host.hostname }}
+{% endfor %}
+{% endif %}

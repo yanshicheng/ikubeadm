@@ -1,0 +1,74 @@
+# 系统初始化相关
+- hosts:
+  - all
+  any_errors_fatal: true
+  roles:
+  - system-init
+  - { role: chrony, when: "groups['chrony']|length > 0" }
+
+# 安装 runtime
+- hosts:
+  - ikube_master
+  - ikube_node
+  - etcd
+  any_errors_fatal: true
+  roles:
+  - container-runtime
+
+# 生成证书
+- hosts:
+  - localhost
+  any_errors_fatal: true
+  roles:
+  - cert-manager
+
+# 部署  kubelet
+- hosts:
+  - ikube_node
+  - ikube_master
+  any_errors_fatal: true
+  roles:
+  - kube-node
+
+# 部署 etcd
+- hosts:
+  - etcd
+  roles:
+  - etcd
+
+# kube-vip 部署
+- hosts:
+  - ikube_master
+  any_errors_fatal: true
+  roles:
+  - kube-vip
+
+# 部署 kube-master
+- hosts:
+  - ikube_master
+  any_errors_fatal: true
+  roles:
+  - kube-master
+
+# 部署 dns
+- hosts:
+  - ikube_master
+  any_errors_fatal: true
+  roles:
+  - kube-dns
+
+# 部署 cni
+- hosts:
+  - ikube_master
+  - ikube_node
+  - calico_rr_group
+  any_errors_fatal: true
+  roles:
+  - kube-cni
+
+# 部署集群插件
+- hosts:
+  - ikube_master
+  any_errors_fatal: true
+  roles:
+  - kube-addon

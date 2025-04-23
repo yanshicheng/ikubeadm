@@ -1,0 +1,47 @@
+---
+# 时区调整的 Ansible 任务
+- name: 检查 tzdata 包是否安装
+  package:
+    name: tzdata
+    state: present
+  register: tzdata_installed
+  failed_when: false # 如果安装失败，不要中断
+
+- name: 使用 timedatectl 设置时区 (systemd 系统)
+  command: timedatectl set-timezone Asia/Shanghai
+  when: ansible_service_mgr == 'systemd'
+  changed_when: false
+  failed_when: false # 如果命令失败不要中断
+
+- name: 创建时区符号链接 (非 systemd 系统)
+  file:
+    src: /usr/share/zoneinfo/Asia/Shanghai
+    dest: /etc/localtime
+    state: link
+    force: yes
+  when: ansible_service_mgr != 'systemd' or tzdata_installed is failed
+  failed_when: false # 如果命令失败不要中断
+
+- name: 确保时区配置文件存在
+  copy:
+    dest: /etc/timezone
+    content: "Asia/Shanghai\n"
+    backup: yes
+  when: ansible_distribution in ['Ubuntu', 'Debian']
+  failed_when: false # 如果命令失败不要中断
+
+- name: 显示时区设置信息
+  debug:
+    msg: "系统时区已设置为 Asia/Shanghai"
+
+- name: 设置目标主机 LC_TIME 环境变量为 24 小时制格式
+  lineinfile:
+    path: /etc/locale.conf
+    regexp: '^LC_TIME='
+    line: 'LC_TIME="en_GB.UTF-8"'
+    create: yes
+  become: true
+
+- name: 24小时制时间设置完成
+  debug:
+    msg: "目标主机时间已设置为24小时制格式"

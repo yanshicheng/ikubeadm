@@ -1,0 +1,87 @@
+# 全局配置
+deploy_name: "example"
+base_dir: "/opt/kubernetes"
+# 沙箱镜像
+registry: "registry.ikubeops.local"
+# 镜像仓库项目
+registry_project: "ikubeops"
+
+########  容器运行时配置 ##########
+container_runtime: "docker"
+# 版本配置
+# 容器版本， docker 和 containerd 通用变量
+container_version: "28.0.4"
+# runc 版本
+runc_version: "v1.2.6"
+# cni 插件版本 containerd 容器运行时
+cni_plugins_version: "v1.6.2"
+# crictl 版本 containerd 容器运行时
+crictl_version: "v1.31.1"
+# nerdctl 版本 containerd 容器运行时
+nerdctl_version: "2.0.4"
+# buildkit 版本 containerd 容器运行时
+buildkit_version: "v0.20.2"
+# cri-docker 版本 containerd 容器运行时
+cri_docker_version: "v0.3.17"
+
+############  沙箱镜像 配置 ##########
+# 沙箱镜像 tag version
+sandbox_image_tag: "3.10"
+# 沙箱镜像
+sandbox_image: "{{ registry }}/{{ registry_project }}/pause:{{ sandbox_image_tag }}"
+# runc 路径配置
+# 镜像仓库相关配置
+
+################# 仓库白名单  ##########
+container_registry_mirrors: [] # 示例: [{registry: "docker.io", endpoints: ["https://mirror1.example.com", "https://mirror2.example.com"]}]
+container_insecure_registries:
+- hosts: "https://harbor.ikubeops.local"
+  cert_auth: true
+- hosts: "http://registry1.example.com:5000"
+  cert_auth: true
+- hosts: "https://registry2.example.com:5000"
+- hosts: "http://registry3.example.com:5000"
+  cert_auth: false
+
+# 用于配置 containerd 的 registry.configs 部分 (高级配置)
+containerd_registry_configs: {} # 示例: {"registry.example.com": {"tls": false, "ca_file": "/path/to/ca.crt"}}
+
+# 可选组件安装标志
+install_crictl: true
+install_nerdctl: true
+install_buildkit: true
+install_cri_docker: true # 是否安装cri-docker
+
+# 是否越过安装容器
+skip_container_install_if_running: false
+
+# 服务控制
+skip_if_running: true # 如果服务已运行是否跳过安装
+restart_on_change: true # 配置更改时是否重启服务
+wait_for_service: true # 是否等待服务启动
+cleanup_temp: true # 是否清理临时文件
+service_start_timeout: 180 # 服务启动超时时间（秒）
+fail_on_file_missing: true # 文件缺失时是否失败（false则仅警告）
+force_reinstall: false # 是否强制重新安装二进制文件
+
+# 临时目录
+download_temp_dir: "/tmp/container-runtime"
+
+# 代理配置 (留空则不设置代理)
+#http_proxy:
+#https_proxy:
+#no_proxy: 
+
+# Docker特定配置
+docker_live_restore: true
+docker_bip: "172.17.0.1/16"
+docker_experimental: false
+docker_log_max_size: "100m"
+docker_log_max_file: "3"
+
+# 备份设置
+backup_config: true # 是否备份原配置
+backup_dir: "/opt/container-runtime-backup" # 备份目录
+max_backups: 5 # 最大保留备份数
+
+centos_family: [ 'CentOS', 'RedHat', 'Rocky', 'AlmaLinux', 'EulerOS' ]

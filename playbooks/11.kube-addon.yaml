@@ -1,0 +1,4 @@
+- hosts:
+  - ikube_master
+  roles:
+  - kube-addon

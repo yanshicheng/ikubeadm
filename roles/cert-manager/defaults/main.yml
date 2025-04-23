@@ -1,0 +1,37 @@
+# 全局通用变量
+deploy_name: "example"
+kubernetes_version: "v1.32.3"
+
+# API服务器设置
+kube_apiserver_lb_addr: "127.0.0.1"
+kube_apiserver_lb_port: "6443"
+kube_apiserver: "https://{{ kube_apiserver_lb_addr }}:{{ kube_apiserver_lb_port }}"
+# 服务网段
+service_cidr: "10.96.0.0/12"
+
+# 工具版本相关
+# CFSSL 工具版本
+cfssl_version: "v1.6.5"
+
+# 证书相关
+# 证书更新控制
+# 更新模式：
+#   - "none": 不更新任何证书（默认值）
+#   - "ca_only": 只更新 CA 证书，不更新组件证书
+#   - "components_only": 只更新组件证书，不更新 CA 证书
+#   - "all": 更新所有证书，包括 CA 和所有组件证书
+cert_update_mode: "none"
+
+# 额外的主机名（可由用户指定）
+master_cert_hosts: []
+# 证书有效期设置 (CA 证书固定为 100 年 = 876000h)
+ca_expiry: "876000h" # 100 年
+cert_expiry: "8760h" # 1 年
+custom_expiry: "8760h"
+
+# 集群配置
+cluster_name: "kubernetes"
+context_name: "default"
+
+# kubernetes.default.svc 地址根据SERVICE_CIDR 设置为网段的第一个地址
+cluster_kubernetes_svc_ip: "{{ service_cidr.split('.')[0] }}.{{ service_cidr.split('.')[1] }}.{{ service_cidr.split('.')[2] }}.{{ service_cidr.split('.')[3]|int + 1 }}"

@@ -1,0 +1,36 @@
+[ikube_master]
+172.16.1.181 hostname=k8s-181.ikubeops.local
+172.16.1.182 hostname=k8s-182.ikubeops.local
+172.16.1.183 hostname=k8s-183.ikubeops.local
+
+[ikube_node] 
+172.16.1.184 hostname=k8s-184.ikubeops.local
+172.16.1.185 hostname=k8s-185.ikubeops.local
+172.16.1.186 hostname=k8s-186.ikubeops.local
+172.16.1.187 hostname=k8s-187.ikubeops.local
+
+[etcd]
+172.16.1.181
+172.16.1.182
+172.16.1.183
+
+# 如果为空则不配置 chrony 时间同步服务
+# CHRONY_SERVER_DEPLOY 为true 则不进行安装配置，只配置其他节点使用这个节点当做同步服务器，也就是你自己已经配置好了，不需要我重新部署。
+[chrony]
+172.16.1.187 CHRONY_SERVER_DEPLOY=true
+
+
+# calico rr 主机组，用不到为空，如果是 bgp 模式 为空则使用 master 组
+[calico_rr_group]
+
+[ikube_cluster:children]
+ikube_master
+ikube_node
+
+[ikube_cluster:vars]
+ansible_user=root
+ansible_port=22
+ansible_ssh_pass=123456
+ansible_become=yes
+ansible_become_method=sudo
+ansible_become_user=root

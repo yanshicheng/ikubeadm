@@ -1,0 +1,307 @@
+---
+# ==========================================================================
+# 容器运行时安装角色 - 主任务文件
+# 支持containerd和docker两种运行时，包含文件预检查和安全安装流程
+# ==========================================================================
+
+# 前置检查
+
+- name: 确保系统为支持的 Linux 分发版
+  ansible.builtin.assert:
+    that:
+    - ansible_os_family in centos_family or ansible_os_family == 'Debian'
+    fail_msg: "不支持的操作系统: {{ ansible_os_family }}"
+    success_msg: "系统类型支持: {{ ansible_os_family }}"
+  tags:
+  - always
+  - check
+
+- name: 确保系统架构支持
+  ansible.builtin.assert:
+    that:
+    - ansible_architecture in ['x86_64', 'aarch64', 'armv7l']
+    fail_msg: "不支持的架构: {{ ansible_architecture }}"
+    success_msg: "系统架构支持: {{ ansible_architecture }}"
+  tags:
+  - always
+  - check
+
+- name: 确保选择了有效的容器运行时
+  ansible.builtin.assert:
+    that: container_runtime in ['containerd', 'docker']
+    fail_msg: "容器运行时必须是 'containerd' 或 'docker'"
+    success_msg: "已选择容器运行时: {{ container_runtime }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - always
+  - check
+# 检查服务状态
+# 检查服务状态
+- name: 检查服务状态
+  ansible.builtin.service_facts:
+  tags:
+  - check
+
+- name: 显示服务运行状态
+  ansible.builtin.debug:
+    msg: "{{ container_runtime }}服务状态: {{ (ansible_facts.services[container_runtime + '.service'].state) if (container_runtime + '.service') in ansible_facts.services else '未运行' }}"
+  tags:
+  - check
+
+- name: 容器运行时停止安装，如需覆盖安装请设置 skip_container_install_if_running=false
+  ansible.builtin.debug:
+    msg: "{{ container_runtime }} 服务已在运行，安装终止。如要覆盖安装，请设置skip_container_install_if_running=false"
+  when:
+  - (container_runtime + '.service') in ansible_facts.services
+  - ansible_facts.services[container_runtime + '.service'].state == "running"
+  - skip_container_install_if_running|default(false)
+  run_once: true
+  tags:
+  - check
+
+- meta: end_play
+  when:
+  - (container_runtime + '.service') in ansible_facts.services
+  - ansible_facts.services[container_runtime + '.service'].state == "running"
+  - skip_container_install_if_running|default(false)
+
+- name: 卸载现有容器运行时
+  block:
+  - name: 处理 docker 停止任务
+    shell: |
+      systemctl stop docker.socket || true
+      systemctl stop containerd.service || true
+      systemctl stop cri-docker.service || true
+      systemctl stop cri-docker.socket || true
+    when:
+    - container_runtime == 'docker'
+    ignore_errors: true
+
+  - name: 停止 {{ container_runtime }} 服务
+    ansible.builtin.systemd:
+      name: "{{ container_runtime }}"
+      state: stopped
+    register: stop_result
+    ignore_errors: true
+
+  - name: 如果无法停止服务，显示警告
+    ansible.builtin.debug:
+      msg: "警告: 无法停止 {{ container_runtime }} 服务，继续卸载可能会出现问题"
+    when: stop_result.failed | default(false)
+
+  # Docker 卸载任务
+  - name: 卸载 Docker (Ubuntu/Debian)
+    ansible.builtin.apt:
+      name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      state: absent
+      purge: yes
+      autoremove: yes
+    when:
+    - ansible_os_family == 'Debian'
+    - container_runtime == 'docker'
+    ignore_errors: true
+
+  - name: 卸载 Docker (CentOS/RHEL)
+    ansible.builtin.yum:
+      name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      state: removed
+    when:
+    - ansible_os_family in centos_family
+    ignore_errors: true
+
+  # Containerd 卸载任务
+  - name: 卸载 Containerd (Ubuntu/Debian)
+    ansible.builtin.apt:
+      name:
+      - containerd.io
+      state: absent
+      purge: yes
+      autoremove: yes
+    when:
+    - ansible_os_family == 'Debian'
+    - container_runtime == 'containerd'
+    ignore_errors: true
+
+  - name: 卸载 Containerd (CentOS/RHEL)
+    ansible.builtin.yum:
+      name:
+      - containerd.io
+      state: removed
+    when:
+    - ansible_os_family in centos_family
+    - container_runtime == 'containerd'
+    ignore_errors: true
+  # 清理数据目录
+  # - name: 备份并清理数据目录 (Docker)
+  #   ansible.builtin.shell: |
+  #     if [ -d "{{ container_data_root | default('/var/lib/docker') }}" ]; then
+  #       timestamp=$(date +%Y%m%d%H%M%S)
+  #       mkdir -p /tmp/docker_backup_$timestamp
+  #       cp -r {{ container_data_root | default('/var/lib/docker') }}/* /tmp/docker_backup_$timestamp/ 2>/dev/null || true
+  #       rm -rf {{ container_data_root | default('/var/lib/docker') }}/* 2>/dev/null || true
+  #       echo "数据已备份到 /tmp/docker_backup_$timestamp"
+  #     fi
+  #   args:
+  #     executable: /bin/bash
+  #   when: container_runtime == 'docker'
+  #   register: cleanup_result
+  #   ignore_errors: true
+
+  # - name: 备份并清理数据目录 (Containerd)
+  #   ansible.builtin.shell: |
+  #     if [ -d "{{ container_data_root | default('/var/lib/docker') }}" ]; then
+  #       timestamp=$(date +%Y%m%d%H%M%S)
+  #       mkdir -p /tmp/containerd_backup_$timestamp
+  #       cp -r /var/lib/containerd/* /tmp/containerd_backup_$timestamp/ 2>/dev/null || true
+  #       rm -rf /var/lib/containerd/* 2>/dev/null || true
+  #       echo "数据已备份到 /tmp/containerd_backup_$timestamp"
+  #     fi
+  #   args:
+  #     executable: /bin/bash
+  #   when: container_runtime == 'containerd'
+  #   register: cleanup_result
+  #   ignore_errors: true
+
+  when:
+  - (container_runtime + '.service') in ansible_facts.services
+  - not skip_container_install_if_running|default(false)
+  tags:
+  - uninstall
+
+# 设置文件检查变量
+- name: 设置运行时相关文件变量
+  ansible.builtin.set_fact:
+    runtime_required_files: "{{ containerd_required_files if container_runtime == 'containerd' else docker_required_files }}"
+    runtime_optional_files: "{{ containerd_optional_files if container_runtime == 'containerd' else docker_optional_files }}"
+  delegate_to: localhost
+  run_once: true
+  tags:
+  - check
+  - files
+
+# 统一的文件检查逻辑
+- name: 检查容器运行时所需文件
+  block:
+  - name: 检查必需文件
+    ansible.builtin.stat:
+      path: "{{ item.file }}"
+    register: file_check
+    loop: "{{ runtime_required_files }}"
+    delegate_to: localhost
+    run_once: true
+
+  - name: 汇总必需文件检查结果
+    ansible.builtin.set_fact:
+      missing_files: "{{ missing_files | default([]) + [item.item.name] }}"
+    loop: "{{ file_check.results }}"
+    when: not item.stat.exists
+    delegate_to: localhost
+    run_once: true
+
+  - name: 检查可选文件
+    ansible.builtin.stat:
+      path: "{{ item.file }}"
+    register: optional_file_check
+    loop: "{{ runtime_optional_files }}"
+    when: item.enabled | bool
+    delegate_to: localhost
+    run_once: true
+
+  - name: 汇总可选文件检查结果
+    ansible.builtin.set_fact:
+      missing_optional_files: "{{ missing_optional_files | default([]) + [item.item.name] }}"
+    loop: "{{ optional_file_check.results }}"
+    when: item is defined and not item.skipped|default(false) and not item.stat.exists
+    delegate_to: localhost
+    run_once: true
+
+  - name: 显示缺失必需文件警告
+    ansible.builtin.debug:
+      msg: "警告：以下必需文件不存在: {{ missing_files | join(', ') }}。请确保将这些文件放置在控制机的以下路径: {% for item in runtime_required_files %}{% if item.name in missing_files %}
+
+        - {{ item.name }}: {{ item.file }}{% endif %}{% endfor %}"
+    when: missing_files is defined and missing_files | length > 0
+    delegate_to: localhost
+    run_once: true
+
+  - name: 显示缺失可选文件警告
+    ansible.builtin.debug:
+      msg: "警告：以下可选文件不存在: {{ missing_optional_files | join(', ') }}。请确保将这些文件放置在控制机的以下路径: {% for item in runtime_optional_files %}{% if item.name in missing_optional_files %}
+
+        - {{ item.name }}: {{ item.file }}{% endif %}{% endfor %}"
+    when: missing_optional_files is defined and missing_optional_files | length > 0
+    delegate_to: localhost
+    run_once: true
+
+  - name: 如果必需文件缺失则失败
+    ansible.builtin.fail:
+      msg: >
+        {{ container_runtime | capitalize }}安装所需的必需文件不存在: {{ missing_files | join(', ') }}。请确保这些文件位于控制机的以下路径: {% for item in runtime_required_files %}{% if item.name in missing_files %} - {{ item.name }}: {{ item.file }} {% endif %}{% endfor %}
+    when:
+    - missing_files is defined
+    - missing_files | length > 0
+    - fail_on_file_missing | bool
+    delegate_to: localhost
+    run_once: true
+
+  - name: 如果可选文件缺失且配置为失败则退出
+    ansible.builtin.fail:
+      msg: >
+        {{ container_runtime | capitalize }}安装所需的可选文件不存在: {{ missing_optional_files | join(', ') }}。请确保这些文件位于控制机的以下路径: {% for item in runtime_optional_files %}{% if item.name in missing_optional_files %} - {{ item.name }}: {{ item.file }} {% endif %}{% endfor %}
+    when:
+    - missing_optional_files is defined
+    - missing_optional_files | length > 0
+    - fail_on_optional_missing | default(true)
+    delegate_to: localhost
+    run_once: true
+  tags:
+  - check
+  - files
+
+- name: 创建 runc 目录
+  ansible.builtin.file:
+    path: "{{ base_dir }}/runc/{{ runc_version }}"
+    state: directory
+    mode: '0755'
+
+- name: 添加 runc 二进制目录到系统环境变量
+  ansible.builtin.lineinfile:
+    path: /etc/profile.d/runc.sh
+    regexp: '^export PATH={{ base_dir }}/runc/{{ runc_version }}:\$PATH'
+    line: 'export PATH={{ base_dir }}/runc/{{ runc_version }}:$PATH'
+    create: yes
+    mode: '0644'
+  tags:
+  - kubernetes_env
+  - config
+
+- name: 分发 runc
+  ansible.builtin.copy:
+    src: "{{ runc }}"
+    dest: "{{ base_dir }}/runc/{{ runc_version }}/runc"
+    mode: '0755'
+  register: runc_install
+  tags:
+  - install
+  - runc
+
+# 根据选择的容器运行时引入相应的任务文件
+
+- name: 部署 containerd
+  ansible.builtin.import_tasks: containerd.yml
+  when: container_runtime == "containerd"
+
+- name: 部署 docker
+  ansible.builtin.import_tasks: docker.yml
+  when: container_runtime == "docker"

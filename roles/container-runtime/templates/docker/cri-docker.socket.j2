@@ -1,0 +1,23 @@
+# CRI Docker Socket 配置
+# 由 Ansible 自动生成，请勿手动修改
+# 生成日期: {{ ansible_date_time.date }}
+
+[Unit]
+Description=CRI Docker Socket for the API
+PartOf=cri-docker.service
+
+[Socket]
+# Socket 配置
+ListenStream=/var/run/cri-dockerd/cri-dockerd.sock
+SocketMode={{ cri_docker_socket_mode | default('0660') }}
+SocketUser=root
+SocketGroup={{ cri_docker_socket_group | default('root') }}
+Service=cri-docker.service
+# 确保即使大量连接也能正常工作
+MaxConnections={{ cri_docker_max_connections | default('200') }}
+# 允许队列中等待的连接数
+Backlog={{ cri_docker_socket_backlog | default('8192') }}
+
+[Install]
+WantedBy=sockets.target
+Also=docker.service

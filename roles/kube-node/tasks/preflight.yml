@@ -1,0 +1,70 @@
+---
+# 检查控制端二进制文件
+- name: 检查控制端 kubelet 二进制文件
+  stat:
+    path: "{{ kubernetes_bin_dir }}/kubelet"
+  register: kubelet_binary
+  delegate_to: localhost
+  run_once: true
+
+- name: 检查控制端 kubectl 二进制文件
+  stat:
+    path: "{{ kubernetes_bin_dir }}/kubectl"
+  register: kubectl_binary
+  delegate_to: localhost
+  run_once: true
+
+- name: 二进制文件不存在
+  fail:
+    msg: |
+      请先下载必要的二进制文件:
+
+      1. Kubernetes 二进制文件应位于:
+         {{ kubernetes_bin_dir }}
+
+      2. CNI 插件应位于:
+         {{ package_dir }}/runtime/cni-plugins/
+
+      请执行 playbook 下载二进制文件后再继续。
+  when: >
+    not kubelet_binary.stat.exists or not kubectl_binary.stat.exists 
+  run_once: true
+
+# 检查证书文件
+- name: 检查 CA 证书
+  stat:
+    path: "{{ local_pki_dir }}/ca.pem"
+  register: ca_cert
+  delegate_to: localhost
+  run_once: true
+
+- name: 检查节点证书
+  stat:
+    path: "{{ local_pki_dir }}/kubelet/{{ ansible_nodename }}.pem"
+  register: node_cert
+  delegate_to: localhost
+
+- name: 检查节点 kubeconfig
+  stat:
+    path: "{{ local_kubeconfig_dir }}/kubelet/{{ ansible_nodename }}.kubeconfig"
+  register: node_kubeconfig
+  delegate_to: localhost
+
+- name: 证书文件不存在
+  fail:
+    msg: |
+      证书文件不存在，请执行 playbook/04.cert-manager.yml 剧本生成证书。
+
+      缺少的文件:
+      {% if not ca_cert.stat.exists %}
+      - CA 证书: {{ local_pki_dir }}/ca.pem
+      {% endif %}
+      {% if not node_cert.stat.exists %}
+      - 节点证书: {{ local_pki_dir }}/kubelet/{{ ansible_nodename }}.pem
+      {% endif %}
+      {% if not node_kubeconfig.stat.exists %}
+      - 节点配置: {{ local_kubeconfig_dir }}/kubelet/{{ ansible_nodename }}.kubeconfig
+      {% endif %}
+  when: not ca_cert.stat.exists or not node_cert.stat.exists or not node_kubeconfig.stat.exists
+  any_errors_fatal: true
+  run_once: true

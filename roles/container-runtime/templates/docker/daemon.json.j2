@@ -1,0 +1,40 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "{{ docker_log_max_size }}",
+    "max-file": "{{ docker_log_max_file }}"
+  },
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "storage-driver": "overlay2",
+  "insecure-registries": [
+    "registry.ikubeops.local:5000"{% set filtered_hosts = [] %}
+    {%- for registry in container_insecure_registries %}
+        {%- set cert_auth = registry.get('cert_auth', false) %}
+        {%- if not cert_auth %}
+            {%- set host = registry.hosts | regex_replace('^https?://', '') %}
+            {%- set _ = filtered_hosts.append(host) %}
+        {%- endif %}
+    {%- endfor %}
+    {%- if filtered_hosts %},{% endif %}
+    {%- for host in filtered_hosts %}
+    {{ '\n    "' }}{{ host }}"{% if not loop.last %},{% endif %}
+    {%- endfor %}
+  ],
+  "registry-mirrors": [
+{% if container_registry_mirrors | length > 0 %}{% for mirror in container_registry_mirrors %}{% for endpoint in mirror.endpoints %}
+    "{{ endpoint }}"{% if not (loop.last and loop.parent.last) %},{% endif %}
+{% endfor %}{% endfor %}{% endif %}
+  ],
+  "data-root": "{{ container_data_root }}",
+  "live-restore": {{ docker_live_restore | default(true) | to_json }},
+  "bip": "{{ docker_bip | default('172.17.0.1/16') }}",
+  "metrics-addr": "{{ ansible_default_ipv4.address | default('127.0.0.1') }}:9323",
+  "experimental": {{ docker_experimental | default(false) | to_json }},
+  "userland-proxy": true,
+  "userland-proxy-path": "{{ base_dir }}/bin/docker-proxy", 
+  "runtimes": {
+    "richrunc": {
+      "path": "{{ base_dir }}/runc/{{ runc_version }}"
+    }
+  }
+}

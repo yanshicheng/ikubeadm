@@ -1,0 +1,8 @@
+---
+- name: 重启服务器
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ reboot_timeout }}"
+    msg: "由Ansible触发的计划重启"
+    pre_reboot_delay: "{{ pre_reboot_delay }}"
+    post_reboot_delay: "{{ post_reboot_delay }}"
+    test_command: whoami

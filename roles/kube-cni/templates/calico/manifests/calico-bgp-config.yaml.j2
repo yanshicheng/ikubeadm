@@ -1,0 +1,17 @@
+apiVersion: crd.projectcalico.org/v1
+kind: BGPConfiguration
+metadata:
+    name: default
+    namespace: {{ cluster_cni_namespace }}
+spec:
+    listenPort: 178
+    bindMode: NodeIP
+    logSeverityScreen: Info
+    # 是否启用full-mesh模式，默认为true
+    nodeToNodeMeshEnabled: false
+    #nodeMeshMaxRestartTime: 120s
+    # 使用的自治系统号，默认为64512
+    asNumber: {{ calico_as_number }}
+    # BGP要对外通告的Service CIDR
+    serviceClusterIPs:
+      - cidr: {{ service_cidr }}

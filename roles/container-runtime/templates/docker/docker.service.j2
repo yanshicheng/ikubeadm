@@ -1,0 +1,37 @@
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+After=network-online.target nss-lookup.target docker.socket firewalld.service containerd.service time-set.target
+Wants=network-online.target containerd.service
+#Requires=docker.socket
+
+[Service]
+Type=notify
+{% if http_proxy is defined and http_proxy | length > 0 %}
+Environment="HTTP_PROXY={{ http_proxy }}"
+{% endif %}
+{% if https_proxy is defined and https_proxy | length > 0 %}
+Environment="HTTPS_PROXY={{ https_proxy }}"
+{% endif %}
+{% if no_proxy is defined and no_proxy | length > 0 %}
+Environment="NO_PROXY={{ no_proxy }}"
+{% endif %}
+Environment="PATH={{ base_dir }}/bin:{{ base_dir }}/runc:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+ExecStartPre=/bin/mkdir -p /run/docker
+#ExecStart={{ base_dir }}/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+ExecStart={{ base_dir }}/bin/dockerd
+ExecReload=/bin/kill -s HUP $MAINPID
+TimeoutSec=0
+RestartSec=2
+Restart=always
+StartLimitBurst=3
+StartLimitInterval=60s
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+Delegate=yes
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

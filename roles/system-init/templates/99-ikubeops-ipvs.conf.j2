@@ -1,0 +1,10 @@
+# IPVS内核模块配置 - 由Ansible管理
+{% for module in ipvs_modules %}
+{{ module }}
+{% endfor %}
+{% if 'NoFound' not in nf_conntrack_ipv4.stdout %}
+nf_conntrack_ipv4
+{% endif %}
+{% if 'NoFound' not in xt_mark.stdout %}
+xt_mark
+{% endif %}

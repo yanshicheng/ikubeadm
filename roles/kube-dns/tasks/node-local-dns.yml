@@ -1,0 +1,45 @@
+---
+- name: 确保 node-local-dns 目录存在
+  file:
+    path: "{{ kube_base_dir }}/addon/node-local-dns"
+    state: directory
+    mode: '0755'
+
+- name: 复制 node-local-dns 模板到 master
+  template:
+    src: "node-local-dns/manifests/nodelocaldns.yaml.j2"
+    dest: "{{ kube_base_dir }}/addon/node-local-dns/nodelocaldns.yaml"
+    mode: '0644'
+
+- name: master 节点部署 node-local-dns
+  shell: |
+    cd {{ kube_base_dir }}/addon/node-local-dns
+    {{ base_dir }}/bin/kubectl apply -f nodelocaldns.yaml
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  run_once: true
+  register: deploy_result
+
+- name: 等待 node-local-dns 组件就绪
+  shell: >
+    PODCOUNT=$({{ base_dir }}/bin/kubectl get pods -n {{ cluster_dns_namespace }} -l k8s-app=node-local-dns --no-headers | wc -l) && test "$PODCOUNT" -gt 0 && test $({{ base_dir }}/bin/kubectl get pods -n {{ cluster_cni_namespace }} -l k8s-app=node-local-dns -o jsonpath='{range .items[*]}{.status.phase}{","}{.status.containerStatuses[*].ready}{"\n"}{end}' | grep -v "Running,true" | wc -l) -eq 0
+  register: node_local_dns_status
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+  until: node_local_dns_status.rc == 0
+  retries: 15
+  delay: 10
+  run_once: true
+
+- name: 查询 node-local-dns pod 状态
+  shell: >
+    {{ base_dir }}/bin/kubectl get pods -n {{ cluster_dns_namespace }} -l k8s-app=node-local-dns
+  register: node_local_dns_pods_status
+  run_once: true
+  changed_when: false
+  delegate_to: "{{ groups['ikube_master'][0] }}"
+
+- name: 输出 node-local-dns pod 状态
+  debug:
+    var: node_local_dns_pods_status.stdout_lines
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['ikube_master'][0] }}"

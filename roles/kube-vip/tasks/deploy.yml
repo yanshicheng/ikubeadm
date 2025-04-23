@@ -1,0 +1,83 @@
+- name: 检查 kube-vip 模式有效性
+  assert:
+    that:
+    - kube_vip_deploy_mode is defined
+    - kube_vip_deploy_mode in ['arp', 'bgp']
+    fail_msg: "错误：kube-vip 模式必须设置为 'arp' 或 'bgp'，当前值为 '{{ kube_vip_deploy_mode | default('未设置') }}'"
+    success_msg: "kube-vip 模式配置正确：'{{ kube_vip_deploy_mode }}'"
+  connection: local
+  run_once: true
+
+- name: 确保目标目录存在
+  file:
+    path: "{{ kube_vip_manifest_path }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: 检查所选 kubeconfig 文件
+  stat:
+    path: "{{ kube_vip_kubeconfig_path }}"
+  register: kubeconfig_stat
+
+- name: 检查 admin kubeconfig 文件
+  debug:
+    msg: "警告: {{ kube_vip_kubeconfig_path }} 文件不存在，kube-vip 可能无法正常工作"
+  when: not kubeconfig_stat.stat.exists
+
+- name: 获取节点 IP 地址作为 BGP RouterID（如未指定）
+  set_fact:
+    kube_vip_bgp_routerid: "{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}"
+  when: kube_vip_deploy_mode == 'bgp' and (kube_vip_bgp_routerid is not defined or kube_vip_bgp_routerid == '')
+
+# 新增任务：检查 kube-vip 是否已经在运行
+- name: 检查 kube-vip pod 是否在运行
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps -a | grep kube-vip | grep -v grep {% else %} {{base_dir}}/bin/docker ps -a | grep kube-vip | grep -v grep {% endif %}
+  register: kube_vip_pod_status
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+
+- name: 创建 kube-vip manifest 文件
+  template:
+    src: "{{ kube_vip_deploy_mode }}/kube-vip.yaml.j2"
+    dest: "{{ kube_vip_manifest_path }}/kube-vip.yaml"
+    mode: '0644'
+  become: true
+  register: kube_vip_manifest
+
+- name: 强制重启 kube-vip
+  block:
+  - name: 创建临时目录 (kube-vip)
+    file:
+      path: "/tmp/ikubeadm-tmp"
+      state: directory
+      mode: '0755'
+
+  - name: 移动 kube-vip 配置文件触发重启
+    shell: |
+      cp {{ kube_vip_manifest_path }}/kube-vip.yaml /tmp/ikubeadm-tmp/kube-vip.yaml.bak
+      rm {{ kube_vip_manifest_path }}/kube-vip.yaml
+      sleep 2
+      mv /tmp/ikubeadm-tmp/kube-vip.yaml.bak {{ kube_vip_manifest_path }}/kube-vip.yaml
+    when: kube_vip_pod_status.rc == 0
+  when:
+  - "kube_vip_manifest is defined and kube_vip_manifest.changed"
+  - "kube_vip_deploy_mode == 'arp'"
+
+- name: 轮训检查 kube-vip 容器是否处于运行状态
+  shell: >
+    {% if container_runtime == "containerd" %} {{base_dir}}/bin/crictl ps | grep kube-vip | grep -i Running |grep -v grep {% else %} {{base_dir}}/bin/docker ps | grep kube-vip | grep -i Up | grep -v grep {% endif %}
+  register: kube_vip_running_status
+  until: kube_vip_running_status.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  when: kube_vip_deploy_mode == 'arp'
+
+- name: kube-vip 部署汇总信息
+  debug:
+    msg: "kube-vip 已成功以 {{ kube_vip_deploy_mode }} 模式部署到 {{ kube_vip_manifest_path }}/kube-vip.yaml"
+  when:
+  - kube_vip_manifest.changed

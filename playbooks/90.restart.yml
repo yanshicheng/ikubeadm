@@ -1,0 +1,7 @@
+---
+- name: 重启服务器
+  hosts: all
+  become: true
+  become_method: sudo
+  roles:
+  - restart

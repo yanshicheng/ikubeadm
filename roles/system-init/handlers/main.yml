@@ -1,0 +1,45 @@
+---
+- name: 重新加载内核模块
+  systemd:
+    name: systemd-modules-load
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+  tags:
+  - ipvs
+  - kernel_modules
+  - kubernetes
+
+- name: 重启 syslog 服务
+  service:
+    name: rsyslog
+    state: restarted
+  ignore_errors: true
+  when: ansible_os_family in centos_family
+
+- name: 重启 journald 服务
+  service:
+    name: systemd-journald
+    state: restarted
+
+- name: 重启 logind 服务
+  systemd:
+    daemon_reload: yes
+    name: systemd-logind
+    state: restarted
+
+- name: 重启 auditd (Ubuntu/Debian)
+  service:
+    name: auditd
+    state: restarted
+    enabled: yes
+  when: ansible_os_family == "Debian"
+
+- name: 重启 auditd (CentOS/RHEL/AlmaLinux)
+  shell: service auditd reload
+  when: ansible_os_family in centos_family
+
+- name: 重启 NetworkManager
+  systemd:
+    name: NetworkManager
+    state: restarted

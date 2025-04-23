@@ -1,0 +1,28 @@
+---
+# etcd 镜像配置
+registry: "registry.ikubeops.local"
+registry_project: "ikubeops"
+kube_base_dir: "/etc/kubernetes"
+container_runtime: "containerd"
+ca_dir: "{{ kube_base_dir }}/pki"
+
+# etcd 部署模式 manifest 模式 和  systemd 模式
+etcd_deploy_mode: "manifest"
+etcd_data_dir: /var/lib/etcd
+etcd_image: "{{ registry }}/{{ registry_project }}/etcd:{{ etcd_version }}"
+etcd_version: "3.5.16-0"
+
+# 动态生成 etcd 初始化集群配置
+etcd_initial_cluster: "{% for host in groups['etcd'] %}{{ hostvars[host].ansible_nodename }}=https://{{ host }}:2380{% if not loop.last %},{% endif %}{% endfor %}"
+deploy_name: "example"
+# 证书生成路径相关变量
+generate_certs_dir: "{{ [playbook_dir | dirname, 'deploy', deploy_name] | path_join }}"
+cfssl_version: "v1.6.5"
+arch_mapping:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm32
+  default: amd64
+# 使用工具路径
+package_dir: "{{ [playbook_dir | dirname, 'packages'] | path_join }}"
+cfssl_dir: "{{ package_dir }}/bin/cfssl/{{ cfssl_version }}/{{ arch_mapping[ansible_architecture] | default(arch_mapping.default) }}"

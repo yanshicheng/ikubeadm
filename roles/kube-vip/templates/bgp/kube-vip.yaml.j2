@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-vip
+  namespace: kube-system
+spec:
+  containers:
+  - args:
+    - manager
+    env:
+    - name: vip_arp
+      value: "false"
+    - name: port
+      value: "{{ kube_apiserver_lb_port }}"
+    - name: vip_nodename
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: vip_interface
+      value: "{{ kube_vip_bgp_interface }}"
+    - name: vip_cidr
+      value: "{{ kube_vip_cidr }}"
+    - name: dns_mode
+      value: first
+    - name: cp_enable
+      value: "true"
+    - name: cp_namespace
+      value: kube-system
+    - name: vip_leaderelection
+      value: "{{ kube_vip_leader_election | string | lower }}"
+    - name: vip_leasename
+      value: plndr-cp-lock
+    - name: vip_leaseduration
+      value: "{{ kube_vip_lease_duration }}"
+    - name: vip_renewdeadline
+      value: "{{ kube_vip_renew_deadline }}"
+    - name: vip_retryperiod
+      value: "{{ kube_vip_retry_period }}"
+    - name: bgp_enable
+      value: true
+    - name: bgp_routerid
+      value: "{{ kube_vip_bgp_routerid }}"
+    - name: bgp_as
+      value: "{{ kube_vip_bgp_as }}"
+{% if kube_vip_bgp_peeraddress != "" %}
+    - name: bgp_peeraddress
+      value: "{{ kube_vip_bgp_peeraddress }}"
+{% endif %}
+{% if kube_vip_bgp_peerpass != "" %}
+    - name: bgp_peerpass
+      value: "{{ kube_vip_bgp_peerpass }}"
+{% endif %}
+    - name: bgp_peeras
+      value: "{{ kube_vip_bgp_peeras }}"
+{% if kube_vip_bgp_peers != "" %}
+    - name: bgp_peers
+      value: "{{ kube_vip_bgp_peers }}"
+{% endif %}
+    - name: lb_enable
+      value: "{{ kube_vip_enable_lb | string | lower }}"
+    - name: lb_port
+      value: "{{ kube_apiserver_lb_port }}"
+    - name: lb_fwdmethod
+      value: "{{ kube_vip_lb_fwdmethod }}"
+    - name: address
+      value: "{{ kube_apiserver_lb_addr }}"
+    - name: prometheus_server
+      value: "{{ kube_vip_prometheus }}"
+    image: {{ kube_vip_image }}
+    imagePullPolicy: IfNotPresent
+    name: kube-vip
+    resources: {}
+    securityContext:
+      capabilities:
+        add:
+        - NET_ADMIN
+        - NET_RAW
+    volumeMounts:
+    - mountPath: /etc/kubernetes/admin.conf
+      name: kubeconfig
+  hostAliases:
+  - hostnames:
+    - kubernetes
+    ip: 127.0.0.1
+  hostNetwork: true
+  volumes:
+  - hostPath:
+      path: {{ kube_vip_kubeconfig_path }}
+    name: kubeconfig
+status: {}
