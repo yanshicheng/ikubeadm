@@ -28,3 +28,4 @@
   when: control_deploy_pattern == 'manifest'
   tags:
   - kube-proxy-pod
+

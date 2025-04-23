@@ -35,7 +35,7 @@
     enabled: yes
   when: ansible_os_family == "Debian"
 
-- name: 重启 auditd (CentOS/RHEL/AlmaLinux)
+- name: 重启 auditd (CentOS/RHEL)
   shell: service auditd reload
   when: ansible_os_family in centos_family
 

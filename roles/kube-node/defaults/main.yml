@@ -28,3 +28,7 @@ kube_reserved_enabled: "no"
 sys_reserved_enabled: "no"
 # pod-max-pids
 pod_max_pids: -1
+
+
+# helm 版本
+helm_version: "v3.17.3"
