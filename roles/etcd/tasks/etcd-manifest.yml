@@ -81,11 +81,19 @@
     shell: |
       cp {{ kube_base_dir }}/manifests/etcd.yaml /tmp/ikubeadm-tmp/etcd.yaml.bak
       rm {{ kube_base_dir }}/manifests/etcd.yaml
-      sleep 2
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep etcd-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep etcd-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
       mv /tmp/ikubeadm-tmp/etcd.yaml.bak {{ kube_base_dir }}/manifests/etcd.yaml
-    when: etcd_pod_status.rc == 0
+
+  - name: 等待重启完成
+    pause:
+      seconds: 30
   when:
-  - "(etcd_cert_copied is defined and etcd_cert_copied.changed) or (etcd_config is defined and etcd_config.changed)"
+  - "(etcd_cert_copied is defined and etcd_cert_copied.changed) or (etcd_config is defined and etcd_config.changed) or (etcd_pod_status.rc == 0)"
 
 - name: 等待 etcd pod 启动
   shell: >

@@ -59,12 +59,20 @@
     shell: |
       cp {{ kube_vip_manifest_path }}/kube-vip.yaml /tmp/ikubeadm-tmp/kube-vip.yaml.bak
       rm {{ kube_vip_manifest_path }}/kube-vip.yaml
-      sleep 2
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep kube-vip | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep kube-vip | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
       mv /tmp/ikubeadm-tmp/kube-vip.yaml.bak {{ kube_vip_manifest_path }}/kube-vip.yaml
-    when: kube_vip_pod_status.rc == 0
+
+  - name: 等待重启完成
+    pause:
+      seconds: 30
   when:
-  - "kube_vip_manifest is defined and kube_vip_manifest.changed"
-  - "kube_vip_deploy_mode == 'arp'"
+  - kube_vip_pod_status.rc == 0
+  - ((kube_vip_manifest is defined and kube_vip_manifest.changed) and (kube_vip_pod_status.rc != 0))
 
 - name: 轮训检查 kube-vip 容器是否处于运行状态
   shell: >

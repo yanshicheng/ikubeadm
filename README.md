@@ -1,6 +1,6 @@
 # ikubeadm
 
-![Kubernetes](https://img.shields.io/badge/Kubernetes-%E5%A4%9A%E9%9B%86%E7%BE%A4%E9%83%A8%E7%BD%B2-326CE5?style=flat-square&logo=kubernetes&logoColor=white)![Ansible](https://img.shields.io/badge/Ansible-%E8%87%AA%E5%8A%A8%E5%8C%96-EE0000?style=flat-square&logo=ansible&logoColor=white)![Container](https://img.shields.io/badge/%E5%AE%B9%E5%99%A8%E8%BF%90%E8%A1%8C%E6%97%B6-Docker%2FContainerd-2496ED?style=flat-square&logo=docker&logoColor=white)![Platform](https://img.shields.io/badge/平台-CentOS%20|%20RHEL%20|%20Ubuntu%20|%20Debian-lightgrey?style=flat-square)![License](https://img.shields.io/badge/%E5%BC%80%E6%BA%90%E5%8D%8F%E8%AE%AE-Apache%202.0-blue?style=flat-square)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-%E5%A4%9A%E9%9B%86%E7%BE%A4%E9%83%A8%E7%BD%B2-326CE5?style=flat-square&logo=kubernetes&logoColor=white)![Ansible](https://img.shields.io/badge/Ansible-%E8%87%AA%E5%8A%A8%E5%8C%96-EE0000?style=flat-square&logo=ansible&logoColor=white)![Container](https://img.shields.io/badge/%E5%AE%B9%E5%99%A8%E8%BF%90%E8%A1%8C%E6%97%B6-Docker%2FContainerd-2496ED?style=flat-square&logo=docker&logoColor=white)![Platform](https://img.shields.io/badge/平台-CentOS%20|%20Ubuntu%20|%20AlmaLinux%20|%20EulerOS-lightgrey?style=flat-square)![License](https://img.shields.io/badge/%E5%BC%80%E6%BA%90%E5%8D%8F%E8%AE%AE-Apache%202.0-blue?style=flat-square)
 
 ## 项目简介
 
@@ -60,11 +60,11 @@ ikubeadm 是一个企业级 Kubernetes 多集群自动化部署和管理解决�
 #### 异构支持
 
 - 操作系统
-    - 支持 Debian 系列
-    - 支持 RedHat [ 'CentOS', 'RedHat', 'Rocky', 'AlmaLinux', 'EulerOS' ]
+  - 支持 Debian 系列
+  - 支持 RedHat [ 'CentOS', 'RedHat', 'Rocky', 'AlmaLinux', 'EulerOS' ]
 - CPU 架构
-    - 支持 amd64
-    - 支持 arm64
+  - 支持 amd64
+  - 支持 arm64
 
 ### 其他特性
 

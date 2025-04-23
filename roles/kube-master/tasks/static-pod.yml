@@ -47,12 +47,33 @@
     shell: |
       cp {{ kube_base_dir }}/manifests/kube-apiserver.yaml /tmp/ikubeadm-tmp/kube-apiserver.yaml.bak
       rm {{ kube_base_dir }}/manifests/kube-apiserver.yaml
-      sleep 2
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep kube-apiserver-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep kube-apiserver-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
       mv /tmp/ikubeadm-tmp/kube-apiserver.yaml.bak {{ kube_base_dir }}/manifests/kube-apiserver.yaml
-    when: apiserver_pod_status.rc == 0
+
+  - name: 等待重启完成
+    pause:
+      seconds: 30
+
+  - name: 移动 kube-vip 配置文件触发重启
+    shell: |
+      cp {{ kube_base_dir }}/manifests/kube-vip.yaml /tmp/ikubeadm-tmp/kube-vip.yaml.bak
+      rm {{ kube_base_dir }}/manifests/kube-vip.yaml
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep kube-vip-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep kube-vip | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
+      mv /tmp/ikubeadm-tmp/kube-vip.yaml.bak {{ kube_base_dir }}//manifests/kube-vip.yaml
+    when: enable_kube_vip | bool
   when:
   - "'ikube_master' in group_names"
-  - "apiserver_result is defined and apiserver_result.changed"
+  - ((apiserver_result is defined and apiserver_result.changed) or apiserver_pod_status.rc == 0)
 
 - name: 分发 kube-controller-manager 静态 Pod 描述文件
   template:
@@ -76,12 +97,20 @@
     shell: |
       cp {{ kube_base_dir }}/manifests/kube-controller-manager.yaml /tmp/ikubeadm-tmp/kube-controller-manager.yaml.bak
       rm {{ kube_base_dir }}/manifests/kube-controller-manager.yaml
-      sleep 2
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep kube-controller-manager-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep kube-controller-manager-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
       mv /tmp/ikubeadm-tmp/kube-controller-manager.yaml.bak {{ kube_base_dir }}/manifests/kube-controller-manager.yaml
-    when: controller_manager_pod_status.rc == 0 # 只有在 pod 存在时才执行
+
+  - name: 等待重启完成
+    pause:
+      seconds: 30
   when:
   - "'ikube_master' in group_names"
-  - "controller_manager_result is defined and controller_manager_result.changed"
+  - ((controller_manager_result is defined and controller_manager_result.changed) or controller_manager_pod_status.rc == 0)
 
 - name: 分发 kube-scheduler 静态 Pod 描述文件
   template:
@@ -105,12 +134,20 @@
     shell: |
       cp {{ kube_base_dir }}/manifests/kube-scheduler.yaml /tmp/ikubeadm-tmp/kube-scheduler.yaml.bak
       rm {{ kube_base_dir }}/manifests/kube-scheduler.yaml
-      sleep 2
+      {% if container_runtime == "containerd" %}
+      { {{base_dir}}/bin/crictl ps -a | grep kube-scheduler-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/crictl rm -f; } || true
+      {% else %}
+      { {{base_dir}}/bin/docker ps -a | grep kube-scheduler-{{ ansible_nodename }} | grep -v grep | awk '{print $1}' | xargs  {{base_dir}}/bin/docker rm -f; } || true
+      {% endif %}
+      sleep 10
       mv /tmp/ikubeadm-tmp/kube-scheduler.yaml.bak {{ kube_base_dir }}/manifests/kube-scheduler.yaml
-    when: scheduler_pod_status.rc == 0 # 只有在 pod 存在时才执行
+
+  - name: 等待重启完成
+    pause:
+      seconds: 30
   when:
   - "'ikube_master' in group_names"
-  - "scheduler_result is defined and scheduler_result.changed"
+  - ((scheduler_result is defined and scheduler_result.changed) or scheduler_pod_status.rc == 0)
 
 - name: 等待所有 pod 启动完成
   pause:
@@ -153,7 +190,7 @@
     validate_certs: no
     method: GET
     return_content: yes
-    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+    status_code: [ 200, 403, 401 ]
   register: apiserver_health_result
   until: apiserver_health_result.status in [200, 403, 401] and apiserver_health_result.content == "ok"
   retries: 12
@@ -167,7 +204,7 @@
     validate_certs: no
     method: GET
     return_content: yes
-    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+    status_code: [ 200, 403, 401 ]
   register: controller_manager_health_result
   until: controller_manager_health_result.status in [200, 403, 401] and controller_manager_health_result.content == "ok"
   retries: 12
@@ -181,7 +218,7 @@
     validate_certs: no
     method: GET
     return_content: yes
-    status_code: [ 200, 403, 401 ] # 接受多种可能的状态码
+    status_code: [ 200, 403, 401 ]
   register: scheduler_health_result
   until: scheduler_health_result.status in [200, 403, 401] and scheduler_health_result.content == "ok"
   retries: 12

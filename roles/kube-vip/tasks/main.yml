@@ -2,6 +2,7 @@
 # 主任务文件 - 流程控制
 - name: kube-vip 部署任务
   import_tasks: deploy.yml
+  when: enable_kube_vip | bool
   tags:
   - kube-vip
   - kube-vip-deploy
@@ -17,6 +18,7 @@
     - "部署模式: {{ kube_vip_deploy_mode }}"
     - "虚拟 IP 地址: {{ kube_apiserver_lb_addr }}"
     - "API 服务器端口: {{ kube_apiserver_lb_port }}"
+  when: enable_kube_vip | bool
   tags:
   - kube-vip
   - kube-vip-deploy
@@ -42,7 +44,9 @@
     - "  ip_vs_wrr"
     - "  ip_vs_sh"
     - "  nf_conntrack"
-  when: kube_vip_enable_lb | bool
+  when:
+  - enable_kube_vip | bool
+  - kube_vip_enable_lb | bool
   tags:
   - kube-vip
   - kube-vip-deploy
@@ -59,7 +63,9 @@
     - "{% if kube_vip_bgp_peers != '' %}  - 对等体配置: {{ kube_vip_bgp_peers }}{% endif %}"
     - ""
     - "BGP 模式需要确保路由器配置正确接收路由通告，并且节点间 BGP 通讯正常"
-  when: kube_vip_deploy_mode == 'bgp'
+  when:
+  - kube_vip_deploy_mode == 'bgp'
+  - enable_kube_vip | bool
   tags:
   - kube-vip
   - kube-vip-deploy
@@ -75,7 +81,9 @@
     - ""
     - "注意: ARP 模式通常仅适用于单一二层网络环境"
     - "如果控制平面节点分布在不同网段，建议使用 BGP 模式代替"
-  when: kube_vip_deploy_mode == 'arp'
+  when:
+  - kube_vip_deploy_mode == 'arp'
+  - enable_kube_vip | bool
   tags:
   - kube-vip
   - kube-vip-deploy
@@ -96,6 +104,7 @@
     - ""
     - "4. 检查 kube-vip 日志:"
     - "   kubectl -n kube-system logs -f kube-vip"
+  when: enable_kube_vip | bool
   tags:
   - kube-vip
   - kube-vip-deploy

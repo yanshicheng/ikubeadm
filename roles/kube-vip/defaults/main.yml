@@ -8,6 +8,7 @@ container_runtime: "containerd"
 kube_apiserver_lb_addr: "127.0.0.1"
 kube_apiserver_lb_port: "6443"
 
+enable_kube_vip: true
 # kube-vip 镜像配置
 registry: "registry.ikubeops.local:5000"
 registry_project: "ikubeops"
@@ -41,7 +42,7 @@ kube_vip_leader_election: true
 kube_vip_lease_duration: "5"
 kube_vip_renew_deadline: "3"
 kube_vip_retry_period: "1"
-kube_vip_enable_lb: true
+kube_vip_enable_lb: true # 
 kube_vip_lb_fwdmethod: "local" # 支持的方法: local, tunnel, masquerade, directroute, bypass
 kube_vip_enable_prometheus: true
 kube_vip_prometheus: ":2112"

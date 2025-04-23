@@ -28,6 +28,8 @@ addon_deploy_pattern: "yaml"
 # 控制组件部署模式  manifest | systemd
 control_deploy_pattern: "manifest"
 
+# 是否部署 kube-vip  设置为 false 指定外部负载均衡器，推荐使用 kube-vip
+enable_kube_vip: true
 # k8s apiserver 负载均衡地址 如果自定义外部负载均衡器 请代理好 master kube-apiserver 地址
 kube_apiserver_lb_addr: "172.16.1.200"
 # 负载均衡器端口
@@ -56,11 +58,13 @@ cluster_cni_namespace: "calico-system"
 #   - "ca_only": 只更新 CA 证书，不更新组件证书
 #   - "components_only": 只更新组件证书，不更新 CA 证书
 #   - "all": 更新所有证书，包括 CA 和所有组件证书
+# 如果设置 更新证书模式，不要执行 00 部署，执行 04.cert-manager.yml, 05, 06, 08 之后重启服务器，或者重启网络组件加载证书配置。
+# 也可以手动备份所有证书，然后执行 04.cert-manager.yml, 05, 06, 08, 没有证书自然就新增证书了
 cert_update_mode: "none"
 # 证书有效期设置 (CA 证书固定为 100 年 = 876000h)
-ca_expiry: "40h" # 100 年
-cert_expiry: "20h" # 50 年
-custom_expiry: "20h"
+ca_expiry: "876000h" # 100 年
+cert_expiry: "438000h" # 50 年
+custom_expiry: "438000h"
 master_cert_hosts:
 - "bin-ikubeops.ikubeops.local" # 额外认证域名或者IP地址
 

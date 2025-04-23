@@ -4,7 +4,7 @@ deploy_name: "example"
 registry: "registry.ikubeops.local:5000"
 # 核心组件镜像仓库二级目录
 registry_project: "ikubeops"
-
+enable_kube_vip: true
 # 版本 
 kubernetes_version: "v1.32.3"
 # kubernetes 集群负载地址

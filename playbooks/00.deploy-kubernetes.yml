@@ -6,6 +6,12 @@
   - system-init
   - { role: chrony, when: "groups['chrony']|length > 0" }
 
+# 重启主机
+- hosts:
+  - all
+  roles:
+  - restart-system
+
 # 安装 runtime
 - hosts:
   - ikube_master
