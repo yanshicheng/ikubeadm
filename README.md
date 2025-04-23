@@ -14,9 +14,11 @@ ikubeadm 是一个企业级 Kubernetes 多集群自动化部署和管理解决�
 
 ⭐ 具体了解可以查看: ` roles/role_name/default/main.yml`
 
+⭐ 容器运行时的选择: 高版本 kubernetes 集群，推荐还是使用 Containerd，因为 docker 官方不支持 虽然通过 cri-dockerd 插件可以兼容，但是不建议使用。有一些莫名的小问题。docker 底层也是使用的 containerd。所以还是选择 Containerd 好一些。
+
 > ⭐ "一次配置，随处部署，多集群统一管理"
 
-### 核心特性与功能s
+### 核心特性与功能
 
 #### 管理特性
 
