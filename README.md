@@ -8,9 +8,9 @@ ikubeadm 是一个企业级 Kubernetes 多集群自动化部署和管理解决�
 
 无论是在本地环境、数据中心还是离线环境中，ikubeadm 都能提供灵活的部署选项和丰富的定制能力，满足企业级生产环境对 Kubernetes 的部署和管理需求。
 
-⭐ 异构自持，支持多种操作系统，arm or amd 混合部署。
+⭐ 异构支持，支持多种操作系统，arm or amd 混合部署。
 
-⭐ 每个 role 都简单写了 readme 可以具体下看 `roles/role_name/README.md`
+⭐ 每个 role 都简单写了 README 可以具体下看 `roles/role_name/README.md`
 
 ⭐ 具体了解可以查看: ` roles/role_name/default/main.yml`
 
