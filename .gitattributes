@@ -1,0 +1,61 @@
+# 所有文本文件使用LF行尾和UTF-8编码
+* text=auto eol=lf encoding=utf-8
+
+# 明确指定二进制文件，避免任何转换
+*.png binary
+*.jpg binary
+*.pdf binary
+*.zip binary
+
+# 脚本文件应可执行并使用LF
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.fish text eol=lf
+*.pl text eol=lf
+*.py text eol=lf
+*.rb text eol=lf
+
+# 声明二进制文件（不应修改的文件）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.bmp binary
+*.tiff binary
+*.tif binary
+*.mp3 binary
+*.mp4 binary
+*.avi binary
+*.mov binary
+*.flv binary
+*.wmv binary
+*.wav binary
+*.ogg binary
+*.pdf binary
+*.doc binary
+*.docx binary
+*.ppt binary
+*.pptx binary
+*.xls binary
+*.xlsx binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.bin binary
+*.dat binary
+*.db binary
+*.sqlite binary

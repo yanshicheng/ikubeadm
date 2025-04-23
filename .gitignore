@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.venv
+
+# VSCode 相关文件
+.vscode/
+*.code-workspace
+
+# PyCharm 相关文件
+.idea/
+*.iml
+*.iws
+*.ipr
+
+packages/*
+!packages/.gitkeep
